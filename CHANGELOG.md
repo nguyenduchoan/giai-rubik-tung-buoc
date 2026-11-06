@@ -4,6 +4,25 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ## Chưa phát hành
 
+### Sửa lỗi
+
+- Có ảnh chụp trùng chưa xử lý thì huỷ lời giải cũ, kể cả khi màu các ô không đổi.
+- Chụp lại một mặt không làm mất các ô đã sửa tay ở mặt khác (ô sửa tay đi cùng ảnh khi app ghép/xoay).
+- Chụp thiếu mặt rồi tô tay mặt còn lại: khi app xoay cả khối, cờ "đã chụp" đi cùng ảnh; trước đây chụp nốt mặt cuối làm lỗi JS và mất ảnh.
+- Vòng vẽ camera không còn dừng hẳn khi gặp ngoại lệ.
+- Camera không còn tự bật lại đè lên ảnh vừa chọn; lượt bật camera hoặc đọc ảnh cũ xong muộn thì bị bỏ qua; ảnh hỏng không làm tắt camera đang chạy; ghi chú "đang xin quyền" không còn bị kẹt; lượt bật bị huỷ do đổi bước thì quay lại vẫn tự bật.
+- Nút "Tự sắp xếp & xoay mặt" báo rõ khi số ô mỗi màu chưa đủ 9; hai tâm trùng màu vẫn được báo kèm nút chụp lại.
+- Tráo/Khối đã giải/Xoá hết đưa bước 1 về ảnh 1.
+- Khoá giữ màn hình ở bước 3 không còn bị mất khi đổi bước nhanh hoặc khi quay lại trang.
+- Lời giải xong khi đang ở bước 3 thì hiện ngay; đang ở bước 1 thì chỉ báo, không kéo sang bước 3.
+- Vòng "Tự chạy" cũ không chạy chồng lên lượt mới.
+- "Giải ngay" vẽ lại lưới ngay sau khi tự ghép, tránh chạm nhầm ô trong lúc đang tính.
+- Tự chụp hoạt động khi chọn chụp lại một ảnh trong danh sách.
+- Gợi ý sửa 2 ô có giới hạn thời gian (trước đây có thể làm đứng giao diện ~2 giây trở lên); bỏ qua tìm kiếm khi số ô mỗi màu chưa đủ 9.
+- Worker nạp `cube.js`/`solver.js` cùng tham số phiên bản; chạy dự phòng trên luồng chính thì rút ngắn thời gian tìm lời giải.
+- `scripts/serve.js`: trả 400 cho đường dẫn có ký tự NUL hoặc mã hoá lỗi thay vì làm dừng tiến trình; chặn symlink trỏ ra ngoài thư mục gốc hoặc vào file ẩn; trả 405 cho phương thức khác GET/HEAD.
+- Kiểm thử trình duyệt: dùng cổng điều khiển Chrome ngẫu nhiên (không nối nhầm Chrome cũ), không treo khi Chrome đóng, mỗi bộ có giới hạn thời gian và dọn cả Chrome khi quá giờ; CI đặt `timeout-minutes` và lưu ảnh cả khi job bị huỷ.
+
 ## 0.1.0 - 2026-11-06
 
 Bản phát hành công khai đầu tiên.

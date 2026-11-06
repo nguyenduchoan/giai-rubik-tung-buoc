@@ -176,6 +176,32 @@ console.log(`Tự sắp xếp/xoay: ${N}/${N} OK; TB ${(totalMs / N).toFixed(1)}
   assert.ok(flagged >= T * 0.9 && found >= T * 0.9);
 }
 
+// Không có cách sửa bằng 1 cặp (3 ô bị đổi vòng): findSwapFix chạy trên luồng giao diện nên phải dừng
+// trong giới hạn thời gian thay vì thử hết 30 cặp (~2 giây trên máy tính, lâu hơn nhiều trên điện thoại).
+{
+  require('../js/vision.js');
+  const V = globalThis.Rubik.vision;
+  const CAM = { 0: [215, 212, 195], 1: [210, 200, 45], 2: [175, 30, 40], 3: [235, 105, 35], 4: [30, 75, 165], 5: [35, 155, 85] };
+  const r5 = seeded(9);
+  let worst = 0;
+  for (let t = 0; t < 5; t++) {
+    const truth = C.applyMoves(SOLVED_COLORS, C.randomScramble(25, r5));
+    const rgbs = truth.map((id) => CAM[id].map((v) => v + (r5() - 0.5) * 20));
+    const c = truth.slice();
+    const idx = [];
+    while (idx.length < 3) {
+      const i = Math.floor(r5() * 54);
+      if (i % 9 !== 4 && !idx.includes(i) && !idx.some((j) => c[j] === c[i])) idx.push(i);
+    }
+    [c[idx[0]], c[idx[1]], c[idx[2]]] = [c[idx[1]], c[idx[2]], c[idx[0]]];
+    const t0 = Date.now();
+    C.findSwapFix(c, V.suspectCells(rgbs, c), { timeBudget: 300 });
+    worst = Math.max(worst, Date.now() - t0);
+  }
+  console.log(`Gợi ý sửa khi không có cách sửa: tối đa ${worst} ms (giới hạn 300 ms + 1 lần thử)`);
+  assert.ok(worst < 300 + 400, 'findSwapFix vượt giới hạn thời gian');
+}
+
 // Có sticker bị nhận sai màu (không thể sửa bằng xoay/đổi chỗ) -> trả về not-found nhanh.
 {
   const colors = C.applyMoves(SOLVED_COLORS, "R U F' L2 D B R2");

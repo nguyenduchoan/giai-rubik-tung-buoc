@@ -5,9 +5,9 @@
 // hoặc `npm run test:e2e` (tự bật máy chủ, chạy cả 4 kịch bản). Biến môi trường:
 //   CHROME_BIN   đường dẫn Chrome/Chromium (mặc định: google-chrome)
 //   CHROME_FLAGS cờ thêm, cách nhau bằng dấu cách (ví dụ --no-sandbox trên CI)
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { launchChrome } = require('./lib/chrome.js');
 require('../js/cube.js');
 const C = globalThis.Rubik.cube;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -108,32 +108,18 @@ function check(name, ok, detail) {
 
 // ---------- Chạy Chrome ----------
 (async () => {
-  const extraFlags = (process.env.CHROME_FLAGS || '').split(/\s+/).filter(Boolean);
-  const chrome = spawn(process.env.CHROME_BIN || 'google-chrome', [
-    '--headless=new', '--remote-debugging-port=9334', '--no-first-run', '--no-default-browser-check',
-    '--user-data-dir=' + outDir + '/profile', '--use-fake-ui-for-media-stream',
-    '--use-fake-device-for-media-stream', '--use-file-for-fake-video-capture=' + y4m, ...extraFlags, 'about:blank',
-  ], { stdio: 'ignore' });
-  chrome.on('error', (err) => console.error(`Không chạy được Chrome (${err.message}). Đặt CHROME_BIN nếu cần.`));
-  let ws;
+  let browser = null;
   try {
-    let targets;
-    for (let i = 0; i < 50; i++) {
-      try { targets = await (await fetch('http://127.0.0.1:9334/json')).json(); break; } catch { await sleep(200); }
-    }
-    ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
-    await new Promise((r) => ws.addEventListener('open', r));
-    let id = 0;
-    const waiting = new Map();
+    browser = await launchChrome({
+      userDataDir: path.join(outDir, 'profile'),
+      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--use-file-for-fake-video-capture=' + y4m],
+    });
+    const { send, evaluate } = browser;
     const errors = [];
-    ws.addEventListener('message', (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.id && waiting.has(msg.id)) { waiting.get(msg.id)(msg); waiting.delete(msg.id); }
+    browser.onEvent((msg) => {
       if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
       if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') errors.push(msg.params.entry.text);
     });
-    const send = (method, params = {}) => new Promise((r) => { const i = ++id; waiting.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
-    const evaluate = async (expr) => (await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result?.value;
     const shot = async (name) => {
       const r = await send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(`${outDir}/${name}.png`, Buffer.from(r.result.data, 'base64'));
@@ -245,12 +231,69 @@ function check(name, ok, detail) {
     await sleep(300);
     check('...và bước 3 không có lời giải nào', await text('#solution-length') === '', await text('#solution-length'));
 
+    // Camera đang bật thì chọn ảnh có sẵn: sang bước khác rồi quay lại, camera không được tự bật đè lên ảnh.
+    await evaluate(`document.querySelector('.tab[data-tab="scan"]').click()`);
+    await evaluate(`document.querySelector('#btn-camera').textContent === '📷 Bật camera' && document.querySelector('#btn-camera').click()`);
+    for (let i = 0; i < 20 && !/Tắt camera/.test(await text('#btn-camera')); i++) await sleep(250);
+    check('bật lại camera ở bước 1', /Tắt camera/.test(await text('#btn-camera')), await text('#btn-camera'));
+    await send('DOM.enable');
+    const { root } = (await send('DOM.getDocument')).result;
+    const { nodeId } = (await send('DOM.querySelector', { nodeId: root.nodeId, selector: '#file-input' })).result;
+    await send('DOM.setFileInputFiles', { nodeId, files: [path.join(__dirname, '..', 'test-images', '1-tam-do.png')] });
+    await sleep(800);
+    check('chọn ảnh => tắt camera, hiện ảnh', /Bật camera/.test(await text('#btn-camera')) &&
+      !await evaluate(`document.querySelector('#btn-capture').disabled`), await text('#btn-camera'));
+    await evaluate(`document.querySelector('.tab[data-tab="edit"]').click()`);
+    await sleep(200);
+    await evaluate(`document.querySelector('.tab[data-tab="scan"]').click()`);
+    await evaluate(`document.dispatchEvent(new Event('visibilitychange'))`);
+    await sleep(2000);
+    check('quay lại bước 1 => vẫn là ảnh, camera không tự bật đè', /Bật camera/.test(await text('#btn-camera')), await text('#btn-camera'));
+
+    // Ảnh hỏng: báo lỗi, giữ nguyên camera đang chạy.
+    const camOn = async () => {
+      for (let i = 0; i < 24 && !/Tắt camera/.test(await text('#btn-camera')); i++) await sleep(250);
+      return /Tắt camera/.test(await text('#btn-camera'));
+    };
+    await evaluate(`document.querySelector('#btn-camera').click()`);
+    check('bật camera lại', await camOn(), await text('#btn-camera'));
+    const broken = path.join(outDir, 'hong.png');
+    fs.writeFileSync(broken, 'day khong phai anh');
+    await send('DOM.setFileInputFiles', { nodeId, files: [broken] });
+    await sleep(1000);
+    check('chọn ảnh hỏng => báo lỗi, camera vẫn chạy', /Tắt camera/.test(await text('#btn-camera')) &&
+      /Không đọc được ảnh/.test(await text('#toast')), `${await text('#btn-camera')} | ${await text('#toast')}`);
+
+    // Quyền camera trả về chậm (điện thoại hay gặp): lượt bật bị huỷ do đổi bước thì quay lại phải tự bật tiếp.
+    await evaluate(`(() => {
+      const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (c) => new Promise((r) => setTimeout(r, 1500)).then(() => orig(c));
+      document.querySelector('#btn-camera').click(); // tắt
+    })()`);
+    await sleep(300);
+    await evaluate(`(() => {
+      document.querySelector('#btn-camera').click(); // bật (đang chờ quyền)
+      document.querySelector('.tab[data-tab="edit"]').click();
+      document.querySelector('.tab[data-tab="scan"]').click();
+    })()`);
+    check('lượt bật bị huỷ do đổi bước => quay lại vẫn tự bật camera', await camOn(), await text('#btn-camera'));
+
+    // Đang chờ quyền thì chọn ảnh: dùng ảnh, không bật camera đè, không kẹt ghi chú "đang xin quyền".
+    await evaluate(`document.querySelector('#btn-camera').click()`); // tắt
+    await sleep(300);
+    await evaluate(`document.querySelector('#btn-camera').click()`); // bật (đang chờ quyền)
+    await sleep(200);
+    await send('DOM.setFileInputFiles', { nodeId, files: [path.join(__dirname, '..', 'test-images', '1-tam-do.png')] });
+    await sleep(2500);
+    check('chọn ảnh khi đang chờ quyền => dùng ảnh, không kẹt ghi chú',
+      /Bật camera/.test(await text('#btn-camera')) && !await evaluate(`document.querySelector('#btn-capture').disabled`) &&
+      !/Đang xin quyền/.test(await text('#camera-note')), `${await text('#btn-camera')} | ${await text('#camera-note')}`);
+
     check('không có lỗi JS trong trình duyệt', errors.length === 0, JSON.stringify(errors));
   } catch (err) {
     check('không có ngoại lệ khi chạy test', false, err && err.stack);
   } finally {
-    if (ws) ws.close();
-    chrome.kill();
+    if (browser) browser.close();
   }
   console.log(failures.length ? `\nKHÔNG ĐẠT ${failures.length} điều kiện: ${failures.join('; ')}` : '\nTất cả điều kiện ĐẠT');
   process.exitCode = failures.length ? 1 : 0;

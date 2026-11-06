@@ -30,6 +30,9 @@
   const state = {
     colors: C.FACES.flatMap((f) => [null, null, null, null, STANDARD[f], null, null, null, null]),
     rgb: new Array(54).fill(null),
+    // Màu người dùng sửa tay cho từng ô (null = theo ảnh). Di chuyển cùng state.rgb khi ghép/xoay ảnh,
+    // áp lại sau mỗi lần phân loại để chụp lại một mặt không làm mất các ô đã sửa ở mặt khác.
+    override: new Array(54).fill(null),
     scanned: {},
     scanIndex: 0,
     solution: null,
@@ -43,6 +46,7 @@
     arrangeNote: null, // { kind: 'ok' | 'warn', html }
     duplicate: null, // { faces: [p1, p2], color }: 2 ảnh chụp trùng một mặt – chặn giải tới khi xử lý xong
     needsClassify: false, // có ảnh mới chưa được phân loại lại (tránh ghi đè màu đã sửa tay)
+    reshoot: false, // người dùng chọn chụp lại một ảnh đã có trong danh sách (cho phép tự chụp đè)
   };
   const INITIAL_COLORS = state.colors.slice();
 
@@ -62,18 +66,37 @@
   const centerOf = (face, colors = state.colors) => colors[FACE_OFFSET[face] + 4];
   const activeTab = () => document.querySelector('.tab.active').dataset.tab;
 
-  // Giữ màn hình điện thoại không tắt khi đang quay/giải.
+  /*
+   * Giữ màn hình điện thoại không tắt khi đang quay camera hoặc ở bước giải. Trạng thái mong muốn được tính lại
+   * mỗi lần và áp dụng tuần tự (request/release là bất đồng bộ, gọi chồng nhau sẽ mất hoặc rò khoá). Trình duyệt
+   * tự nhả khoá khi trang bị ẩn nên phải xin lại khi trang hiện lại.
+   */
   let wakeLock = null;
-  async function keepAwake(on) {
+  let wakeSyncing = false;
+  const wantAwake = () => document.visibilityState === 'visible' &&
+    (cam.mode === 'camera' || activeTab() === 'solve');
+  async function updateWakeLock() {
+    if (wakeSyncing || !navigator.wakeLock) return;
+    wakeSyncing = true;
     try {
-      if (on && !wakeLock && navigator.wakeLock) {
-        wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.addEventListener('release', () => { wakeLock = null; });
-      } else if (!on && wakeLock) {
-        await wakeLock.release();
-        wakeLock = null;
+      for (let i = 0; i < 4; i++) {
+        if (wantAwake() && !wakeLock) {
+          const lock = await navigator.wakeLock.request('screen');
+          lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+          wakeLock = lock;
+        } else if (!wantAwake() && wakeLock) {
+          const lock = wakeLock;
+          wakeLock = null;
+          await lock.release();
+        } else {
+          break;
+        }
       }
-    } catch (e) { /* không hỗ trợ hoặc bị từ chối: bỏ qua */ }
+    } catch (e) {
+      /* không hỗ trợ hoặc bị từ chối: bỏ qua */
+    } finally {
+      wakeSyncing = false;
+    }
   }
 
   function switchTab(name) {
@@ -88,7 +111,7 @@
       if (cam.wanted) startCamera();
     }
     if (name === 'solve') renderSolve();
-    keepAwake(name === 'solve');
+    updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
@@ -104,7 +127,6 @@
     stream: null,
     facing: 'environment',
     wanted: false, // người dùng đã bật camera (để tự bật lại khi quay về tab)
-    starting: false,
     cx: 0.5, cy: 0.5, size: 0.6,
     live: null,
     lastSample: 0,
@@ -113,6 +135,10 @@
     cooldownUntil: 0,
     hint: '',
     progress: 0,
+    // Tăng mỗi khi người dùng chuyển nguồn ảnh (bật/tắt camera, chọn ảnh): việc bất đồng bộ của lượt cũ
+    // (xin quyền camera, giải mã ảnh) xong muộn thì bỏ, không đè lên nguồn mới.
+    session: 0,
+    pending: 0, // session của lượt bật camera đang chờ (0 = không có)
   };
 
   function gridRect() {
@@ -185,7 +211,11 @@
   function autoCaptureTick(now, detail) {
     const auto = $('#auto-capture').checked && cam.mode === 'camera';
     if (!auto) { cam.progress = 0; setHud(''); return; }
-    if (state.scanned[currentFace()] && SCAN_ORDER.every((f) => state.scanned[f])) { cam.progress = 0; return; }
+    if (state.scanned[currentFace()] && !state.reshoot) {
+      cam.progress = 0;
+      setHud('Đã chụp đủ. Muốn chụp lại mặt nào thì bấm vào ảnh đó trong danh sách.');
+      return;
+    }
     if (now < cam.cooldownUntil) { cam.progress = 0; return; }
 
     const uniform = detail.spread.every((sp) => sp <= AUTO.maxSpread);
@@ -227,7 +257,18 @@
     }
   }
 
+  // Một ngoại lệ trong lúc xử lý khung hình không được làm dừng vòng vẽ (camera sẽ đứng hình mãi).
   function renderLoop(now) {
+    try {
+      renderFrame(now);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      requestAnimationFrame(renderLoop);
+    }
+  }
+
+  function renderFrame(now) {
     if (cam.mode === 'camera' && cam.video && cam.video.readyState >= 2) {
       const w = cam.video.videoWidth, h = cam.video.videoHeight;
       if (frame.width !== w || frame.height !== h) {
@@ -248,12 +289,11 @@
         const { x, y, s } = gridRect();
         const detail = V.sampleGridDetailed(frameCtx, x, y, s);
         cam.live = detail.rgb.map(V.classifyHeuristic);
-        if (!state.scanned[currentFace()]) renderMiniFace($('#current-preview'), cam.live);
+        if (!state.scanned[currentFace()] || state.reshoot) renderMiniFace($('#current-preview'), cam.live);
         autoCaptureTick(now, detail);
       }
       drawOverlay();
     }
-    requestAnimationFrame(renderLoop);
   }
   requestAnimationFrame(renderLoop);
 
@@ -270,7 +310,7 @@
     $('#btn-camera').textContent = mode === 'camera' ? '⏹ Tắt camera' : '📷 Bật camera';
     $('#btn-flip').hidden = mode !== 'camera';
     if (mode !== 'camera') { setHud(''); cam.progress = 0; }
-    keepAwake(mode === 'camera');
+    updateWakeLock();
   }
 
   const cameraSupported = () => !!(window.isSecureContext && navigator.mediaDevices &&
@@ -280,36 +320,51 @@
     $('#camera-note').innerHTML = html;
   }
 
+  /*
+   * Mỗi lần gọi là một lượt mới (cam.session) thay cho lượt đang chờ, nên không chặn theo cờ "đang bật".
+   * cam.wanted = ý muốn dùng camera của người dùng: đặt ngay khi gọi (lượt bị huỷ do đổi bước/ẩn trang thì
+   * quay lại sẽ tự bật tiếp), chỉ bỏ khi lỗi thật, khi bấm tắt, hoặc khi đã chuyển sang dùng ảnh.
+   * Ghi chú trạng thái chỉ do lượt hiện hành thay đổi; huỷ lượt thì xoá ghi chú "đang xin quyền" (cancelCameraStart).
+   */
   async function startCamera() {
-    if (cam.starting || cam.mode === 'camera') return;
+    if (cam.mode === 'camera') return;
     if (!cameraSupported()) {
       showCameraNote('Trình duyệt chỉ cho dùng camera trực tiếp khi trang mở bằng <b>https://</b>. ' +
         'Hãy dùng nút <b>📸 Chụp bằng app camera</b> bên dưới.');
       toast('Không mở được camera trực tiếp (cần HTTPS). Dùng "Chụp bằng app camera".', 6000);
       return;
     }
-    cam.starting = true;
+    const session = ++cam.session;
+    cam.pending = session;
+    cam.wanted = true;
+    const current = () => session === cam.session;
+    // Trong lúc chờ quyền/khởi động, người dùng có thể đã chọn ảnh, tắt camera hoặc rời bước 1.
+    const stale = () => !current() || activeTab() !== 'scan' || document.hidden;
+    const finish = (note) => { if (current()) { cam.pending = 0; showCameraNote(note); } };
+    let stream = null;
     showCameraNote('Đang xin quyền camera… Hãy bấm <b>Cho phép</b> trên hộp thoại của trình duyệt.');
     try {
-      cam.stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: cam.facing }, width: { ideal: 1280 }, height: { ideal: 960 } },
         audio: false,
       });
+      if (stale()) { stream.getTracks().forEach((t) => t.stop()); finish(''); return; }
       const video = document.createElement('video');
       video.setAttribute('playsinline', '');
       video.playsInline = true;
       video.muted = true;
-      video.srcObject = cam.stream;
+      video.srcObject = stream;
       await video.play();
+      if (stale()) { stream.getTracks().forEach((t) => t.stop()); finish(''); return; }
+      cam.stream = stream;
       cam.video = video;
-      cam.wanted = true;
       cam.prevRgb = null;
-      if (activeTab() !== 'scan') { stopCamera(); return; }
       setMode('camera');
-      showCameraNote('');
+      finish('');
     } catch (err) {
-      if (cam.stream) cam.stream.getTracks().forEach((t) => t.stop());
-      cam.stream = null;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (!current()) return;
+      cam.pending = 0;
       cam.wanted = false;
       if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
         showCameraNote('Quyền camera đang bị chặn. Bấm biểu tượng 🔒 cạnh địa chỉ trang → <b>Camera: Cho phép</b>, ' +
@@ -318,12 +373,20 @@
         showCameraNote('Không mở được camera: ' + (err && err.message ? err.message : err) +
           '. Bạn vẫn có thể dùng <b>📸 Chụp bằng app camera</b>.');
       }
-    } finally {
-      cam.starting = false;
+    }
+  }
+
+  // Huỷ lượt bật camera đang chờ (nếu có) và các việc bất đồng bộ của nguồn ảnh cũ.
+  function cancelCameraStart() {
+    cam.session++;
+    if (cam.pending) {
+      cam.pending = 0;
+      showCameraNote('');
     }
   }
 
   function stopCamera() {
+    cancelCameraStart();
     if (cam.stream) cam.stream.getTracks().forEach((t) => t.stop());
     cam.stream = null;
     cam.video = null;
@@ -357,9 +420,10 @@
       const wanted = cam.wanted;
       stopCamera();
       cam.wanted = wanted;
-    } else if (cam.wanted && activeTab() === 'scan') {
+    } else if (cam.wanted && activeTab() === 'scan' && cam.mode !== 'image') {
       startCamera();
     }
+    updateWakeLock();
   });
 
   $('#btn-camera').addEventListener('click', () => {
@@ -372,13 +436,28 @@
     startCamera();
   });
 
-  // Ảnh từ app camera hoặc thư viện. Dùng data: URL để hợp với CSP của server.
+  /*
+   * Ảnh từ app camera hoặc thư viện (đọc thành data: URL để hợp với CSP của server). Chỉ khi ảnh đọc được mới tắt camera và bỏ ý muốn dùng camera (để camera
+   * không tự bật lại đè lên ảnh); ảnh lỗi thì giữ nguyên camera. Chọn ảnh khác hoặc bật camera trong lúc
+   * đang đọc thì bỏ kết quả của lần đọc cũ.
+   */
   function loadImageFile(file) {
     if (!file) return;
+    cancelCameraStart();
+    const session = cam.session;
+    const fail = () => {
+      if (session !== cam.session) return;
+      toast('Không đọc được ảnh.');
+      // Lượt bật camera đang chờ (nếu có) đã bị huỷ ở trên: bật lại nếu người dùng vẫn muốn dùng camera.
+      if (cam.wanted && cam.mode !== 'camera' && activeTab() === 'scan') startCamera();
+    };
     const reader = new FileReader();
     reader.onload = () => {
+      if (session !== cam.session) return; // đã chọn ảnh khác hoặc bật camera
       const img = new Image();
       img.onload = () => {
+        if (session !== cam.session) return;
+        cam.wanted = false;
         stopCamera();
         const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
         frame.width = Math.round(img.width * scale);
@@ -388,10 +467,10 @@
         setMode('image');
         toast('Kéo khung lưới cho khớp với mặt Rubik rồi bấm "Chụp mặt này".');
       };
-      img.onerror = () => toast('Không đọc được ảnh.');
+      img.onerror = fail;
       img.src = reader.result;
     };
-    reader.onerror = () => toast('Không đọc được ảnh.');
+    reader.onerror = fail;
     reader.readAsDataURL(file);
   }
   ['#file-input', '#file-camera'].forEach((sel) => {
@@ -448,10 +527,12 @@
     const off = FACE_OFFSET[face];
     rgbs.forEach((rgb, k) => {
       state.rgb[off + k] = rgb;
+      state.override[off + k] = null; // ảnh mới thay cho các ô đã sửa tay của chính mặt này
       state.colors[off + k] = V.classifyHeuristic(rgb);
     });
     state.scanned[face] = true;
     state.needsClassify = true;
+    state.reshoot = false;
     cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
     cam.prevRgb = null;
     flashFeedback();
@@ -538,6 +619,7 @@
       li.appendChild(st);
       li.addEventListener('click', () => {
         state.scanIndex = i;
+        state.reshoot = !!state.scanned[f]; // cho tự chụp lại mặt đã chụp
         cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
         renderScanGuide();
       });
@@ -558,10 +640,12 @@
    * hai mặt khác nhau (ignoreDuplicate) – ví dụ mặt đỏ và mặt cam đều một màu, trông giống nhau dưới đèn.
    */
   function classifyScanned({ ignoreDuplicate = false } = {}) {
+    if (!state.rgb.every(Boolean)) return { valid: false, changed: 0 }; // chưa đủ dữ liệu ảnh cả 6 mặt
     state.needsClassify = false;
     const dup = ignoreDuplicate ? null : V.duplicateCenters(state.rgb, { centerMax: AUTO.minCenterDiff });
+    const withOverrides = (colors) => colors.map((c, i) => (state.override[i] ?? c));
     if (dup) {
-      state.colors = state.rgb.map(V.classifyHeuristic);
+      state.colors = withOverrides(state.rgb.map(V.classifyHeuristic));
       state.suggestion = null;
       state.fixedFaces = new Set();
       state.duplicate = { faces: dup, color: state.colors[dup[0] * 9 + 4] };
@@ -569,8 +653,35 @@
       return { valid: false, changed: 0, duplicate: true };
     }
     state.duplicate = null;
-    state.colors = V.classifyAll(state.rgb);
+    state.colors = withOverrides(V.classifyAll(state.rgb));
     return autoFix();
+  }
+
+  /*
+   * Biến đổi vị trí/hướng các ảnh: mọi dữ liệu gắn với ô/mặt phải di chuyển cùng màu – rgb, ô sửa tay,
+   * và cờ "đã chụp" của từng mặt (nếu không, mặt chưa chụp/tô tay bị dời sang ô có cờ "đã chụp").
+   */
+  function moveCellData(fn) {
+    state.rgb = fn(state.rgb);
+    state.override = fn(state.override);
+    const flags = fn(C.FACES.flatMap((f) => new Array(9).fill(!!state.scanned[f])));
+    const scanned = {};
+    C.FACES.forEach((f) => { if (flags[FACE_OFFSET[f] + 4]) scanned[f] = true; });
+    state.scanned = scanned;
+    // Ô đang chụp phải là một mặt còn thiếu (nếu có), không phải ô vừa nhận ảnh của mặt khác.
+    const missing = SCAN_ORDER.findIndex((f) => !scanned[f]);
+    if (missing >= 0 && scanned[SCAN_ORDER[state.scanIndex]]) state.scanIndex = missing;
+    state.reshoot = false;
+  }
+
+  function resetInput() {
+    state.rgb = new Array(54).fill(null);
+    state.override = new Array(54).fill(null);
+    state.scanned = {};
+    state.scanIndex = 0;
+    state.reshoot = false;
+    state.duplicate = null;
+    state.needsClassify = false;
   }
 
   // Các thao tác bị chặn khi còn 2 ảnh chụp trùng chưa xử lý.
@@ -624,13 +735,22 @@
    */
   function autoFix() {
     if (state.colors.some((c) => c === null)) return { valid: false, changed: 0 };
+    // Đổi chỗ/xoay ảnh hay đổi 2 ô đều giữ nguyên số ô mỗi màu: thiếu/thừa thì không tìm kiếm (tốn thời gian vô ích),
+    // dòng kiểm tra bên dưới lưới đã báo màu nào thiếu/thừa. Riêng hai tâm trùng màu thì vẫn để autoArrange báo
+    // (kèm nút chụp lại), vì đó là nguyên nhân chính khiến số ô lệch.
+    const centersDistinct = new Set(C.FACES.map((f) => centerOf(f))).size === 6;
+    if (centersDistinct && !PAL.every((p) => state.colors.filter((c) => c === p.id).length === 9)) {
+      state.arrangeNote = null;
+      state.suggestion = null;
+      return { valid: false, changed: 0, reason: 'counts' };
+    }
     let rotatedImages = 0;
     if (!C.validateColors(state.colors).ok) {
       const res = C.autoArrange(state.colors);
       if (!res.ok && res.reason === 'not-found') arrangeMemo = { key: state.colors.join(','), ok: false };
       if (res.ok) {
         state.colors = res.colors;
-        state.rgb = C.applyArrangement(state.rgb, res.arrangement);
+        moveCellData((arr) => C.applyArrangement(arr, res.arrangement));
         rotatedImages = res.arrangement.filter((a) => a.rot).length;
       } else {
         return arrangeFailed(res);
@@ -639,7 +759,7 @@
     state.suggestion = null;
     const rots = canonicalRotations(state.colors);
     state.colors = C.applyCubeRotations(state.colors, rots);
-    state.rgb = C.applyCubeRotations(state.rgb, rots);
+    moveCellData((arr) => C.applyCubeRotations(arr, rots));
     state.fixedFaces = new Set();
     const u = centerOf('U'), f = centerOf('F');
     state.arrangeNote = {
@@ -702,6 +822,7 @@
   function setCellColor(idx, color) {
     if (state.colors[idx] === color) return;
     state.colors[idx] = color;
+    state.override[idx] = color;
     afterManualEdit();
   }
 
@@ -772,8 +893,8 @@
     }
     if (e.target.closest('[data-apply-suggestion]') && state.suggestion) {
       const { a, b, colorA, colorB } = state.suggestion;
-      state.colors[a] = colorA;
-      state.colors[b] = colorB;
+      state.colors[a] = state.override[a] = colorA;
+      state.colors[b] = state.override[b] = colorB;
       afterManualEdit();
       return;
     }
@@ -799,6 +920,9 @@
     const fix = autoFix();
     renderEditor();
     if (fix.valid) toast('Đã ghép lại thành khối hợp lệ.');
+    else if (fix.reason === 'counts') {
+      toast('Chưa thể sắp xếp: ' + C.validateColors(state.colors).error, 5000);
+    }
   });
 
   // ================== 2. KIỂM TRA MÀU ==================
@@ -864,6 +988,7 @@
     };
     rot(state.colors);
     rot(state.rgb);
+    rot(state.override);
   }
 
   function renderPalette(counts) {
@@ -920,10 +1045,7 @@
   $('#btn-scramble').addEventListener('click', () => {
     const moves = C.randomScramble(22);
     state.colors = C.applyMoves(SOLVED_COLORS, moves);
-    state.rgb = new Array(54).fill(null);
-    state.scanned = {};
-    state.duplicate = null;
-    state.needsClassify = false;
+    resetInput();
     clearArrangeNote();
     state.suggestion = null;
     renderEditor();
@@ -931,17 +1053,13 @@
   });
   $('#btn-reset-solved').addEventListener('click', () => {
     state.colors = SOLVED_COLORS.slice();
-    state.duplicate = null;
+    resetInput();
     clearArrangeNote();
     renderEditor();
   });
   $('#btn-clear').addEventListener('click', () => {
     state.colors = state.colors.map((c, i) => (i % 9 === 4 ? c : null));
-    state.rgb = new Array(54).fill(null);
-    state.scanned = {};
-    state.scanIndex = 0;
-    state.duplicate = null;
-    state.needsClassify = false;
+    resetInput();
     clearArrangeNote();
     renderEditor();
   });
@@ -972,10 +1090,12 @@
     solverWorker.worker = null; // ví dụ mở trực tiếp file:// trên Chrome
   }
 
+  // Dự phòng khi không tạo được Worker (ví dụ mở file://): chạy trên luồng giao diện nên rút ngắn thời gian
+  // tìm lời giải ngắn hơn để trang không đứng lâu (lời giải có thể dài hơn vài bước).
   function solveOnMainThread(facelets) {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
-        try { resolve(S.solve(facelets, SOLVE_OPTS)); } catch (e) { reject(e); }
+        try { resolve(S.solve(facelets, { ...SOLVE_OPTS, timeLimit: 300 })); } catch (e) { reject(e); }
       }, 50);
     });
   }
@@ -999,8 +1119,8 @@
     if (!v.ok && !state.colors.some((c) => c === null)) {
       const fix = autoFix();
       v = C.validateColors(state.colors);
+      renderEditor(); // lưới phải theo bố cục mới ngay, kẻo chạm ô trong lúc đang tính sẽ sửa nhầm ô
       if (fix.valid) toast('🪄 Đã tự ghép/xoay các mặt cho khớp rồi giải.', 4000);
-      else renderEditor();
     }
     if (!v.ok) {
       toast('Chưa thể giải: ' + v.error, 5000);
@@ -1010,13 +1130,13 @@
     const btn = $('#btn-solve');
     btn.disabled = true;
     btn.textContent = '⏳ Đang tính lời giải…';
-    // Chốt đầu vào trước khi chờ bộ giải: người dùng vẫn sửa/tráo/xoá được trong lúc đó.
+    // Chốt đầu vào trước khi chờ bộ giải: người dùng vẫn sửa/tráo/xoá/chụp lại được trong lúc đó.
     const input = state.colors.slice();
-    const key = input.join(',');
+    const key = inputKey();
     try {
       const moves = await solveAsync(v.facelets);
-      if (state.colors.join(',') !== key) {
-        toast('Màu đã thay đổi trong lúc tính nên bỏ lời giải cũ – bấm "Giải ngay" lại để giải khối mới.', 5000);
+      if (inputKey() !== key) {
+        toast('Dữ liệu đã thay đổi trong lúc tính nên bỏ lời giải cũ – bấm "Giải ngay" lại để giải khối mới.', 5000);
         return;
       }
       state.solution = moves;
@@ -1024,7 +1144,10 @@
       state.solutionKey = key;
       state.step = 0;
       state.playing = false;
-      switchTab('solve');
+      // Người dùng đã sang bước 1 (ví dụ đang chụp) thì không kéo họ đi, chỉ báo.
+      if (activeTab() === 'edit') switchTab('solve');
+      else if (activeTab() === 'solve') renderSolve();
+      else toast(`Đã có lời giải ${moves.length} bước – mở "3. Hướng dẫn giải" để xem.`, 5000);
     } catch (err) {
       toast('Lỗi khi giải: ' + (err.message || err), 6000);
     } finally {
@@ -1074,9 +1197,14 @@
     return C.applyMoves(state.startColors, state.solution.slice(0, step));
   }
 
-  // Đầu vào đã đổi kể từ lúc giải (sửa màu, xoay mặt, tráo, xoá, chụp lại…) thì bỏ lời giải cũ.
+  /*
+   * Đầu vào của bộ giải. Lời giải chỉ còn hiệu lực khi khóa này không đổi: sửa màu, xoay mặt, tráo, xoá,
+   * chụp lại… đều làm đổi màu; có ảnh chụp trùng chưa xử lý thì đầu vào không đáng tin dù màu giữ nguyên.
+   */
+  const inputKey = () => (state.duplicate ? 'duplicate:' : '') + state.colors.join(',');
+
   function dropStaleSolution() {
-    if (!state.solution || state.solutionKey === state.colors.join(',')) return;
+    if (!state.solution || state.solutionKey === inputKey()) return;
     state.solution = null;
     state.startColors = null;
     state.solutionKey = null;
@@ -1178,18 +1306,24 @@
   const stepForward = () => animateStep(1);
   const stepBack = () => animateStep(-1);
 
-  // Tự chạy liên tục hết toàn bộ lời giải trong một lượt (bấm lại để dừng).
+  /*
+   * Tự chạy liên tục hết toàn bộ lời giải trong một lượt (bấm lại để dừng). Mỗi lượt có mã riêng: dừng rồi bấm chạy
+   * lại (hoặc giải khối khác) trong lúc lượt cũ còn đang chờ hoạt ảnh thì lượt cũ phải tự kết thúc, không chạy chồng.
+   */
+  let playRun = 0;
   async function play() {
     if (state.playing || !state.solution) return;
-    if (state.step >= state.solution.length) state.step = 0;
+    const run = ++playRun;
+    const sol = state.solution;
+    const active = () => state.playing && playRun === run && state.solution === sol && state.step < sol.length;
+    if (state.step >= sol.length) state.step = 0;
     state.playing = true;
     renderSolve();
-    while (state.playing && state.step < state.solution.length) {
+    while (active()) {
       await stepForward();
-      if (state.playing && state.step < state.solution.length) {
-        await new Promise((r) => setTimeout(r, speed() * 0.6));
-      }
+      if (active()) await new Promise((r) => setTimeout(r, speed() * 0.6));
     }
+    if (playRun !== run) return;
     state.playing = false;
     renderSolve();
   }

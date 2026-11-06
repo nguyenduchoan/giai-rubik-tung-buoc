@@ -18,11 +18,47 @@ const OUT = path.resolve(process.env.E2E_OUT || '.e2e-out');
 const MODES = (process.env.MISTAKES || '0,1,2,3').split(',').map((s) => s.trim()).filter(Boolean);
 const TESTS = path.join(__dirname, '..', 'tests');
 
+/*
+ * Mỗi bộ kiểm thử thường chạy dưới 2 phút; quá giới hạn thì dừng hẳn và tính là không đạt (tránh treo CI).
+ * Bộ kiểm thử chạy trong nhóm tiến trình riêng để khi dừng thì dừng cả Chrome nó đã mở (không để sót Chrome).
+ */
+const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS || 4 * 60 * 1000);
+const GROUP_KILL = process.platform !== 'win32';
+let running = null;
+
+function killTree(child) {
+  try {
+    if (GROUP_KILL) process.kill(-child.pid, 'SIGKILL');
+    else child.kill('SIGKILL');
+  } catch (e) { /* đã thoát */ }
+}
+
 function run(label, args, env = {}) {
   return new Promise((resolve) => {
     console.log(`\n=== ${label} ===`);
-    const child = spawn(process.execPath, args, { stdio: 'inherit', env: { ...process.env, ...env } });
-    child.on('exit', (code) => resolve(code === 0));
+    const child = spawn(process.execPath, args, {
+      stdio: 'inherit', env: { ...process.env, ...env }, detached: GROUP_KILL,
+    });
+    running = child;
+    const timer = setTimeout(() => {
+      console.error(`✗ ${label}: quá ${Math.round(TIMEOUT_MS / 1000)} giây, dừng kiểm thử`);
+      killTree(child);
+    }, TIMEOUT_MS);
+    child.on('error', (err) => { console.error(err); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      running = null;
+      killTree(child); // dọn tiến trình con còn sót trong nhóm (nếu có)
+      resolve(code === 0);
+    });
+  });
+}
+
+// Ctrl+C / CI huỷ job: nhóm tiến trình riêng không nhận tín hiệu từ terminal nên phải tự dừng.
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    if (running) killTree(running);
+    process.exit(130);
   });
 }
 

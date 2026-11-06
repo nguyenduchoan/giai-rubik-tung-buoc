@@ -91,9 +91,10 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | --- | --- |
 | `node tests/solver.test.js` | Bước xoay, kiểm tra hợp lệ (gồm mọi cách đổi 2 ô), giải 40 trạng thái ngẫu nhiên |
 | `node tests/vision.test.js` | Nhận màu dưới ánh sáng/nhiễu mô phỏng, phát hiện chụp trùng mặt |
-| `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu |
-| `npm run test:e2e` | Chrome headless + camera giả: tự chụp, sửa màu, giải hết, huỷ lời giải khi dữ liệu đổi. Kịch bản `MISTAKES=0` chụp đúng; `1` nhầm thứ tự/hướng; `2` thứ tự và chiều hoàn toàn tuỳ ý; `3` thêm 2 ô đỏ/cam bị nhận nhầm. Chạy riêng một kịch bản: `MISTAKES=2 npm run test:e2e`. |
-| `node tests/e2e-state.js` | Nhập ảnh qua "Chọn ảnh có sẵn": chụp trùng thì chặn giải, giải lại khi hình 3D đang xoay, quay lại bước chụp không mất màu đã sửa, tự cập nhật không mất dữ liệu nhập tay (mất ~1 phút vì phải chờ chu kỳ kiểm tra bản mới). |
+| `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
+| `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
+| `npm run test:e2e` | Chrome headless + camera giả: tự chụp, sửa màu, giải hết, huỷ lời giải khi dữ liệu đổi, chuyển qua lại giữa camera và ảnh (kể cả ảnh hỏng, quyền camera trả về chậm). Kịch bản `MISTAKES=0` chụp đúng; `1` nhầm thứ tự/hướng; `2` thứ tự và chiều hoàn toàn tuỳ ý; `3` thêm 2 ô đỏ/cam bị nhận nhầm. Chạy riêng một kịch bản: `MISTAKES=2 npm run test:e2e`. |
+| `node tests/e2e-state.js` | Nhập ảnh qua "Chọn ảnh có sẵn": chụp trùng thì chặn giải và huỷ lời giải cũ, giải lại khi hình 3D đang xoay, chụp lại/quay lại bước chụp không mất màu đã sửa, chụp thiếu mặt + tô tay, lời giải xong khi đang ở bước khác, khoá giữ màn hình, tự cập nhật không mất dữ liệu nhập tay (mất ~2 phút vì phải chờ chu kỳ kiểm tra bản mới). |
 
 Nếu lệnh `google-chrome` không có trên PATH (ví dụ macOS), đặt biến `CHROME_BIN`:
 

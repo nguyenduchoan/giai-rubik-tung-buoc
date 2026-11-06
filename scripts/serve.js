@@ -4,7 +4,8 @@
  *   node scripts/serve.js            # http://127.0.0.1:8000/
  *   node scripts/serve.js 3000       # đổi cổng
  *   HOST=0.0.0.0 node scripts/serve.js   # cho máy khác trong mạng LAN truy cập (camera vẫn cần HTTPS)
- * Không phục vụ file/thư mục bắt đầu bằng dấu chấm (.git, .local...).
+ * Không phục vụ file/thư mục bắt đầu bằng dấu chấm (.git, .local...) hay file nằm ngoài thư mục gốc
+ * (kể cả qua symlink). Yêu cầu lỗi chỉ nhận mã 4xx/5xx, không bao giờ làm dừng tiến trình.
  */
 'use strict';
 const http = require('http');
@@ -24,37 +25,73 @@ const TYPES = {
   '.svg': 'image/svg+xml',
 };
 
-const handler = (root) => (req, res) => {
+function send(res, status, body) {
+  if (res.headersSent) { res.destroy(); return; }
+  res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(body);
+}
+
+// Đường dẫn trong thư mục gốc mà yêu cầu trỏ tới, hoặc { status } nếu phải từ chối.
+function resolveRequest(root, url) {
   let rel;
   try {
-    rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    rel = decodeURIComponent(new URL(url, 'http://localhost').pathname);
   } catch (e) {
-    res.writeHead(400).end('Bad request');
-    return;
+    return { status: 400 };
   }
+  // NUL làm fs ném lỗi đồng bộ; \ là dấu phân cách trên Windows.
+  if (rel.includes('\0') || rel.includes('\\')) return { status: 400 };
   if (rel.endsWith('/')) rel += 'index.html';
+  if (rel.split('/').some((part) => part.startsWith('.'))) return { status: 404 };
   const file = path.join(root, rel);
-  if (!file.startsWith(root + path.sep) || rel.split('/').some((part) => part.startsWith('.'))) {
-    res.writeHead(404).end('Not found');
-    return;
-  }
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      res.writeHead(404).end('Not found');
+  if (!file.startsWith(root + path.sep)) return { status: 404 };
+  return { file };
+}
+
+const handler = (root) => async (req, res) => {
+  try {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.setHeader('Allow', 'GET, HEAD');
+      send(res, 405, 'Method not allowed');
       return;
     }
+    const { file, status } = resolveRequest(root, req.url);
+    if (status) { send(res, status, status === 400 ? 'Bad request' : 'Not found'); return; }
+    let real;
+    try {
+      real = await fs.promises.realpath(file);
+    } catch (e) {
+      send(res, 404, 'Not found');
+      return;
+    }
+    // Symlink có thể trỏ ra ngoài thư mục gốc hoặc vào file ẩn bên trong (vd. .local/): kiểm tra lại trên đường dẫn thật.
+    const realRel = path.relative(root, real);
+    if (!real.startsWith(root + path.sep) || realRel.split(path.sep).some((part) => part.startsWith('.'))) {
+      send(res, 404, 'Not found');
+      return;
+    }
+    const data = await fs.promises.readFile(real).catch(() => null);
+    if (!data) { send(res, 404, 'Not found'); return; }
     res.writeHead(200, {
-      'Content-Type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Content-Type': TYPES[path.extname(real).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': 'no-cache',
     });
     res.end(data);
-  });
+  } catch (err) {
+    send(res, 500, 'Internal server error');
+  }
 };
 
 // root: thư mục phục vụ (mặc định thư mục dự án; kiểm thử dùng bản sao tạm để giả lập phiên bản mới).
 function start(port = 8000, host = '127.0.0.1', root = ROOT) {
   return new Promise((resolve, reject) => {
-    const server = http.createServer(handler(path.resolve(root)));
+    let realRoot;
+    try {
+      realRoot = fs.realpathSync(path.resolve(root));
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    const server = http.createServer(handler(realRoot));
     server.once('error', reject);
     server.listen(port, host, () => resolve(server));
   });

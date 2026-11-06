@@ -384,8 +384,11 @@
    * Khi đủ 9 ô mỗi màu mà khối vẫn sai, thường là 2 ô bị nhận nhầm màu cho nhau (đỏ↔cam,
    * trắng↔vàng...). Thử đổi màu từng cặp ô nghi ngờ (suspects từ vision.suspectCells, ô mơ hồ nhất
    * trước) rồi chạy autoArrange. Trả về { a, b, colorA, colorB, result } hoặc null.
+   * Chạy trên luồng giao diện nên có giới hạn thời gian (timeBudget ms): khi có cách sửa thì thường tìm ra
+   * ở vài lần thử đầu (< 40 ms trên dữ liệu mô phỏng); khi không có thì thử hết 30 cặp mất tới ~2 giây.
    */
-  function findSwapFix(colors, suspects, { top = 12, maxTries = 30 } = {}) {
+  function findSwapFix(colors, suspects, { top = 12, maxTries = 30, timeBudget = 400 } = {}) {
+    const deadline = Date.now() + timeBudget;
     const cand = suspects.slice(0, top);
     const pairs = [];
     for (let i = 0; i < cand.length; i++) {
@@ -400,6 +403,7 @@
     }
     pairs.sort((x, y) => y.score - x.score);
     for (const { a, b } of pairs.slice(0, maxTries)) {
+      if (Date.now() > deadline) break;
       const trial = Array.from(colors);
       [trial[a], trial[b]] = [trial[b], trial[a]];
       const result = autoArrange(trial, { maxNodes: 4e5 });

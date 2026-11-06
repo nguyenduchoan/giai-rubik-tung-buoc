@@ -4,22 +4,29 @@
 //   2. Hoạt ảnh của lời giải cũ kết thúc sau khi đã có lời giải mới thì không được làm nhảy bước.
 //   3. Quay lại bước chụp rồi sang lại bước 2 (không chụp thêm) thì không được ghi đè màu đã sửa tay.
 //   4. Máy chủ có bản mới: không tự tải lại khi người dùng đã tô màu thủ công.
+//   5. Giải xong rồi chụp lại thành ảnh trùng (màu không đổi) thì lời giải cũ phải bị huỷ.
+//   6. Chụp lại một mặt không làm mất các ô đã sửa tay ở mặt khác.
+//   7. Lời giải xong khi người dùng đã sang bước 1 thì không kéo họ sang bước 3; đang ở bước 3 thì hiện ngay.
+//   8. Chụp 5 mặt + tô tay mặt thứ 6 (app tự xoay cả khối), rồi chụp nốt mặt 6: không lỗi, không mất ảnh.
+//   9. Khoá giữ màn hình ở bước 3: bật/tắt đúng khi đổi bước nhanh, xin lại khi trang hiện lại.
 // Chạy: node tests/e2e-state.js [thư mục kết quả]   (hoặc npm run test:e2e)
 // Biến môi trường: CHROME_BIN, CHROME_FLAGS (như tests/e2e-camera.js), E2E_STATE_PORT (mặc định 8766).
 // Mỗi điều kiện không đạt => thoát với mã 1.
 'use strict';
-const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const zlib = require('zlib');
 const { start } = require('../scripts/serve.js');
+const { launchChrome } = require('./lib/chrome.js');
+require('../js/cube.js');
+
+const C = globalThis.Rubik.cube;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ROOT = path.join(__dirname, '..');
 const outDir = path.resolve(process.argv[2] || path.join('.e2e-out', 'state'));
 const PORT = Number(process.env.E2E_STATE_PORT || 8766);
-const CDP_PORT = 9338;
 
 // ---------- Ảnh mặt Rubik dạng PNG (không cần thư viện) ----------
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
@@ -92,6 +99,12 @@ function check(name, ok, detail) {
   const solvedImg = (faces) => faces.map((f) => path.join(imgDir, `${f}.png`));
   // Thứ tự ô chụp của app: Trước, Phải, Sau, Trái, Trên, Dưới.
   const DUP_SET = solvedImg(['G', 'R', 'B', 'R2', 'W', 'Y']); // thiếu mặt cam, ảnh 4 chụp lại mặt đỏ
+  const SOLVED_SET = solvedImg(['G', 'R', 'B', 'O', 'W', 'Y']); // khối đã giải, đúng cách cầm chuẩn
+  // Khối đã giải cầm nghêng (lật quanh trục Phải): app sẽ phải xoay cả khối về cách cầm chuẩn.
+  const LETTER = ['W', 'Y', 'R', 'O', 'B', 'G'];
+  const ST = { U: 0, R: 2, F: 5, D: 1, L: 3, B: 4 };
+  const tilted = C.rotateWholeCube(C.FACES.flatMap((f) => new Array(9).fill(ST[f])), 'R');
+  const TILT = ['F', 'R', 'B', 'L', 'U', 'D'].map((f) => LETTER[tilted[C.FACES.indexOf(f) * 9 + 4]]);
   const REAL_CUBE = fs.readdirSync(path.join(ROOT, 'test-images')).filter((f) => f.endsWith('.png')).sort()
     .map((f) => path.join(ROOT, 'test-images', f)); // khối thật, lời giải 8 bước
 
@@ -103,31 +116,14 @@ function check(name, ok, detail) {
   const server = await start(PORT, '127.0.0.1', site);
   const url = `http://127.0.0.1:${PORT}/`;
 
-  const extraFlags = (process.env.CHROME_FLAGS || '').split(/\s+/).filter(Boolean);
-  const chrome = spawn(process.env.CHROME_BIN || 'google-chrome', [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, '--no-first-run', '--no-default-browser-check',
-    '--deny-permission-prompts', '--user-data-dir=' + path.join(outDir, 'profile'), ...extraFlags, 'about:blank',
-  ], { stdio: 'ignore' });
-  chrome.on('error', (err) => console.error(`Không chạy được Chrome (${err.message}). Đặt CHROME_BIN nếu cần.`));
-
-  let ws;
+  let browser = null;
   try {
-    let targets;
-    for (let i = 0; i < 50; i++) {
-      try { targets = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json`)).json(); break; } catch { await sleep(200); }
-    }
-    ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
-    await new Promise((r) => ws.addEventListener('open', r));
-    let id = 0;
-    const waiting = new Map();
+    browser = await launchChrome({ userDataDir: path.join(outDir, 'profile'), args: ['--deny-permission-prompts'] });
+    const { send, evaluate } = browser;
     const errors = [];
-    ws.addEventListener('message', (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.id && waiting.has(msg.id)) { waiting.get(msg.id)(msg); waiting.delete(msg.id); }
+    browser.onEvent((msg) => {
       if (msg.method === 'Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
     });
-    const send = (method, params = {}) => new Promise((r) => { const i = ++id; waiting.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
-    const evaluate = async (expr) => (await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result.result?.value;
     const text = (sel) => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); return e ? e.innerText.trim() : null; })()`);
     const click = (sel) => evaluate(`document.querySelector(${JSON.stringify(sel)}).click()`);
     const activeTab = () => evaluate(`document.querySelector('.tab.active').dataset.tab`);
@@ -159,8 +155,31 @@ function check(name, ok, detail) {
     const waitSolve = async () => {
       for (let i = 0; i < 40 && await activeTab() !== 'solve'; i++) await sleep(150);
     };
+    // Bấm vào ảnh thứ i (1..6) trong danh sách ở bước 1 để chụp lại ảnh đó.
+    const chooseShot = async (i) => {
+      await tab('scan');
+      await evaluate(`document.querySelectorAll('#face-list li')[${i - 1}].click()`);
+      await sleep(200);
+    };
 
     await send('Runtime.enable'); await send('Page.enable'); await send('DOM.enable');
+    // Giả lập Wake Lock API (request/release bất đồng bộ như thật) để đếm số khoá đang giữ.
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
+      const locks = new Set();
+      const drop = (l) => { if (!l.released) { l.released = true; locks.delete(l); l.dispatchEvent(new Event('release')); } };
+      Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: {
+        request: async () => {
+          await new Promise((r) => setTimeout(r, 60));
+          const l = new EventTarget();
+          l.released = false;
+          l.release = async () => { await new Promise((r) => setTimeout(r, 60)); drop(l); };
+          locks.add(l);
+          return l;
+        },
+      } });
+      window.__wakeLocks = () => locks.size;
+      window.__browserReleaseLocks = () => [...locks].forEach(drop);
+    })();` });
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 1400, deviceScaleFactor: 1, mobile: true });
 
     // ----- 4. Có bản mới trên máy chủ nhưng người dùng đã tô màu thủ công -----
@@ -230,7 +249,7 @@ function check(name, ok, detail) {
     check('bước 3 không có lời giải', await text('#solution-length') === '', await text('#solution-length'));
     await tab('edit');
     await pick(0, 0, 3);
-    await pick(0, 0, 5);
+    await pick(0, 0, 0); // trả về đúng màu trắng (ô sửa tay được giữ qua lần chụp lại bên dưới)
     check('sửa tay vẫn giữ cảnh báo chụp trùng', /chụp trùng/.test(await text('#arrange-note')) && !/Màu hợp lệ/.test(await text('#validation')),
       `${await text('#arrange-note')} | ${await text('#validation')}`);
     await evaluate(`[...document.querySelectorAll('[data-rescan]')].find((b) => /ảnh 4/.test(b.textContent)).click()`);
@@ -252,12 +271,96 @@ function check(name, ok, detail) {
     check('xác nhận => bỏ cảnh báo, phân loại lại và cho giải',
       !/chụp trùng/.test(await text('#arrange-note') || '') && /Màu hợp lệ/.test(await text('#validation')), await text('#validation'));
 
+    // ----- 5. Giải xong rồi chụp lại thành ảnh trùng, màu không đổi -----
+    console.log('\n[5] Chụp lại thành ảnh trùng sau khi đã giải');
+    await open();
+    await upload(SOLVED_SET);
+    await click('#btn-solve');
+    await waitSolve();
+    check('giải khối đã giải => 0 bước', /\(0 bước\)/.test(await text('#solution-length')), await text('#solution-length'));
+    const colorsBefore = await evaluate(`[...document.querySelectorAll('#net-small .grid span')].map((s) => s.style.background).join()`);
+    await chooseShot(4); // mặt cam
+    await upload(solvedImg(['R2'])); // chụp nhầm lại mặt đỏ, bị nhận thành cam => màu y hệt cũ
+    check('bước 2 báo chụp trùng', /chụp trùng/.test(await text('#arrange-note')), await text('#arrange-note'));
+    check('màu các ô không đổi (đúng ca khó)', await evaluate(`[...document.querySelectorAll('#net .grid button')].map((s) => s.style.background).join()`) === colorsBefore);
+    await tab('solve');
+    check('bước 3 không còn lời giải cũ', await text('#solution-length') === '' && /Chưa có lời giải/.test(await text('#hold-hint')),
+      `${await text('#solution-length')} | ${await text('#step-desc')}`);
+
+    // ----- 6. Chụp lại một mặt giữ các ô đã sửa tay ở mặt khác -----
+    console.log('\n[6] Chụp lại một mặt khi đã sửa tay mặt khác');
+    await open();
+    await upload(SOLVED_SET);
+    await tab('edit');
+    await pick(0, 0, 3); // mặt TRÊN (trắng), ô đầu => cam
+    const editedCell = await cellColor(0, 0);
+    await chooseShot(1); // chụp lại mặt TRƯỚC (xanh lá)
+    await upload(solvedImg(['G']));
+    check('ô đã sửa ở mặt khác vẫn giữ màu', await activeTab() === 'edit' && await cellColor(0, 0) === editedCell &&
+      /đúng 9 lần/.test(await text('#validation')), `${await cellColor(0, 0)} | ${await text('#validation')}`);
+    await chooseShot(5); // chụp lại chính mặt TRÊN => ảnh mới thay cho ô đã sửa
+    await upload(solvedImg(['W']));
+    check('chụp lại chính mặt đó => ảnh mới thay ô sửa tay', /Màu hợp lệ/.test(await text('#validation')), await text('#validation'));
+
+    // ----- 7. Giải xong khi người dùng đã sang bước khác -----
+    console.log('\n[7] Bấm Giải ngay rồi sang bước chụp');
+    await evaluate(`(() => { document.querySelector('#btn-solve').click(); document.querySelector('.tab[data-tab="scan"]').click(); })()`);
+    await sleep(2500);
+    check('vẫn ở bước 1, có thông báo đã có lời giải', await activeTab() === 'scan' && /Đã có lời giải/.test(await toastText()),
+      `${await activeTab()} | ${await toastText()}`);
+    await tab('solve');
+    check('mở bước 3 => thấy lời giải', /\(0 bước\)/.test(await text('#solution-length')), await text('#solution-length'));
+
+    console.log('\n[7b] Bấm Giải ngay rồi mở ngay bước 3 (bộ giải còn đang dựng bảng tra)');
+    await open();
+    await tab('edit');
+    await click('#btn-scramble');
+    await evaluate(`(() => { document.querySelector('#btn-solve').click(); document.querySelector('.tab[data-tab="solve"]').click(); })()`);
+    for (let i = 0; i < 30 && /Đang tính/.test(await text('#btn-solve')); i++) await sleep(200);
+    await sleep(300);
+    check('lời giải hiện ngay ở bước 3, không phải bấm lại tab',
+      await activeTab() === 'solve' && /^Bước 1 \//.test(await text('#step-counter')) && !/mở "3\./.test(await toastText()),
+      `${await text('#step-counter')} | ${await toastText()}`);
+
+    // ----- 8. Chụp 5 mặt, tô tay mặt 6 (app xoay cả khối), rồi chụp nốt mặt 6 -----
+    console.log('\n[8] Chụp 5 mặt + tô tay mặt thứ 6 trên khối cầm nghêng, rồi chụp nốt mặt 6');
+    await open();
+    await upload(solvedImg(TILT.slice(0, 5)));
+    await tab('edit');
+    const sixth = LETTER.indexOf(TILT[5]);
+    for (let k = 0; k < 9; k++) await pick(3, k, sixth); // mặt DƯỚI trong lưới = ảnh 6
+    check('tô đủ => ghép thành khối hợp lệ (đã xoay cả khối)', /Màu hợp lệ/.test(await text('#validation')), await text('#validation'));
+    await tab('scan');
+    const shots = await evaluate(`[...document.querySelectorAll('#face-list li')].map((li) => li.classList.contains('done'))`);
+    const statusText = await text('#auto-status');
+    const current = Number((/ảnh (\d)/.exec(statusText) || [])[1]);
+    check('bước 1 vẫn còn đúng 1 ảnh chưa chụp và đang chờ đúng ảnh đó',
+      shots.filter((d) => !d).length === 1 && shots[current - 1] === false, `${JSON.stringify(shots)} | ${statusText}`);
+    await upload(solvedImg([TILT[5]]));
+    check('chụp nốt mặt 6 => sang bước 2, hợp lệ', await activeTab() === 'edit' && /Màu hợp lệ/.test(await text('#validation')),
+      `${await activeTab()} | ${await text('#validation')}`);
+
+    // ----- 9. Khoá giữ màn hình ở bước 3 -----
+    console.log('\n[9] Khoá giữ màn hình');
+    await tab('solve');
+    await sleep(400);
+    check('ở bước 3 => giữ 1 khoá', await evaluate('__wakeLocks()') === 1, await evaluate('__wakeLocks()'));
+    await tab('edit');
+    await sleep(400);
+    check('rời bước 3 => nhả khoá', await evaluate('__wakeLocks()') === 0, await evaluate('__wakeLocks()'));
+    await evaluate(`(() => { for (const t of ['solve', 'edit', 'solve', 'scan', 'solve']) document.querySelector('.tab[data-tab="' + t + '"]').click(); })()`);
+    await sleep(800);
+    check('đổi bước liên tục rồi dừng ở bước 3 => đúng 1 khoá', await evaluate('__wakeLocks()') === 1, await evaluate('__wakeLocks()'));
+    await evaluate('__browserReleaseLocks()'); // trình duyệt tự nhả khi trang bị ẩn
+    await evaluate(`document.dispatchEvent(new Event('visibilitychange'))`);
+    await sleep(400);
+    check('trang hiện lại ở bước 3 => xin lại khoá', await evaluate('__wakeLocks()') === 1, await evaluate('__wakeLocks()'));
+
     check('không có lỗi JS trong trình duyệt', errors.length === 0, JSON.stringify(errors));
   } catch (err) {
     check('không có ngoại lệ khi chạy test', false, err && err.stack);
   } finally {
-    if (ws) ws.close();
-    chrome.kill();
+    if (browser) browser.close();
     server.close();
     fs.rmSync(site, { recursive: true, force: true });
   }

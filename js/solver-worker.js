@@ -1,6 +1,7 @@
 /* Chạy bộ giải trong Web Worker để giao diện không bị đứng khi dựng bảng tra. */
 /* global importScripts */
-importScripts('cube.js', 'solver.js');
+// Dùng cùng tham số phiên bản (?v=...) với URL của worker để không nạp bản cũ trong cache.
+importScripts('cube.js' + self.location.search, 'solver.js' + self.location.search);
 
 self.onmessage = (e) => {
   const { id, type, facelets, options } = e.data;
