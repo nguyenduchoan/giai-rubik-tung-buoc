@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1420">
+  <title>Giải Rubik từng bước</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=20261106">
+</head>
+<body>
+  <header class="app-header">
+    <h1>🧩 Giải Rubik từng bước</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="scan" role="tab">1. Chụp các mặt</button>
+      <button class="tab" data-tab="edit" role="tab">2. Kiểm tra màu</button>
+      <button class="tab" data-tab="solve" role="tab">3. Hướng dẫn giải</button>
+    </nav>
+  </header>
+
+  <div id="update-banner" class="update-banner" hidden>
+    Đã có bản mới của trang.
+    <button id="btn-reload" class="btn small primary" type="button">↻ Tải lại</button>
+  </div>
+
+  <main>
+    <!-- ========== 1. CHỤP ========== -->
+    <section id="tab-scan" class="panel active">
+      <div class="scan-layout">
+        <div class="card camera-card">
+          <div class="camera-wrap" id="camera-wrap">
+            <canvas id="camera-canvas" width="640" height="480"></canvas>
+            <div id="camera-hud" class="camera-hud" hidden></div>
+            <div id="flash" class="flash"></div>
+            <div id="camera-placeholder" class="camera-placeholder">
+              <p>Bật camera để quay khối Rubik, hoặc chụp/tải ảnh từng mặt.</p>
+              <button id="btn-camera-big" class="btn primary">📷 Cho phép dùng camera</button>
+              <p id="camera-note" class="muted small"></p>
+            </div>
+          </div>
+          <p id="auto-status" class="auto-status"></p>
+          <p id="scan-instruction-inline" class="instruction inline-instruction"></p>
+          <div class="row wrap">
+            <button id="btn-capture" class="btn primary" disabled>✅ Chụp mặt này</button>
+            <label class="btn toggle" title="Khi khối được giữ yên trong khung khoảng 1 giây, app tự chụp">
+              <input id="auto-capture" type="checkbox" checked> 🎥 Tự chụp khi giữ yên
+            </label>
+            <button id="btn-camera" class="btn">📷 Bật camera</button>
+            <button id="btn-flip" class="btn" hidden title="Đổi camera trước/sau">🔄 Đổi camera</button>
+          </div>
+          <div class="row wrap">
+            <label class="btn">
+              📸 Chụp bằng app camera
+              <input id="file-camera" type="file" accept="image/*" capture="environment" hidden>
+            </label>
+            <label class="btn">
+              🖼️ Chọn ảnh có sẵn
+              <input id="file-input" type="file" accept="image/*" hidden>
+            </label>
+          </div>
+          <label class="row slider-row">
+            Cỡ khung lưới
+            <input id="grid-size" type="range" min="20" max="95" value="60">
+          </label>
+          <p class="muted small">Mẹo: đặt mặt Rubik vừa khít khung 3×3 (kéo khung để di chuyển), nơi đủ sáng, tránh lóa. Màu có thể sửa lại ở bước 2.</p>
+        </div>
+
+        <div class="card guide-card">
+          <h2 id="scan-title">Mặt TRƯỚC</h2>
+          <div class="guide-visual">
+            <div class="edge-label top" id="edge-top">Cạnh trên: mặt TRÊN</div>
+            <div class="mini-face" id="current-preview"></div>
+            <div class="edge-label bottom" id="edge-bottom">Cạnh dưới: mặt DƯỚI</div>
+          </div>
+          <p id="scan-instruction" class="instruction"></p>
+          <h3>Tiến độ</h3>
+          <ol id="face-list" class="face-list"></ol>
+          <div class="row wrap">
+            <button id="btn-to-edit" class="btn">Sang bước kiểm tra màu →</button>
+          </div>
+          <p class="muted small">Không có camera? Bạn có thể tô màu thủ công ở bước 2.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 2. KIỂM TRA ========== -->
+    <section id="tab-edit" class="panel">
+      <div class="card">
+        <h2>Kiểm tra &amp; sửa màu</h2>
+        <p class="muted"><b>Chạm vào ô bị sai để chọn lại màu.</b> Ô có dấu <span class="legend-suspect">?</span> là ô app nghi nhận sai màu. Không cần tự xoay mặt: app tự xoay/ghép các ảnh cho khớp (nút ⟳ chỉ để xoay tay nếu muốn).</p>
+        <div id="palette" class="palette"></div>
+        <div id="arrange-note" class="arrange-note" hidden></div>
+        <div id="net" class="net"></div>
+        <div id="validation" class="validation"></div>
+        <div class="row wrap">
+          <button id="btn-solve" class="btn primary">🧠 Giải ngay</button>
+          <button id="btn-auto-arrange" class="btn" title="Tự tìm cách đổi chỗ/xoay các mặt để khối hợp lệ">🪄 Tự sắp xếp &amp; xoay mặt</button>
+          <button id="btn-scramble" class="btn">🎲 Tráo ngẫu nhiên (thử)</button>
+          <button id="btn-reset-solved" class="btn">Khối đã giải</button>
+          <button id="btn-clear" class="btn">Xoá hết</button>
+        </div>
+        <details class="help">
+          <summary>Về thứ tự và chiều chụp</summary>
+          <ul>
+            <li>Chụp 6 mặt theo thứ tự và chiều cầm tuỳ ý; app tự ghép và xoay các ảnh cho khớp.</li>
+            <li>Lưới màu hiển thị theo cách cầm khi giải (ưu tiên tâm trắng ở trên, tâm xanh lá ở trước).</li>
+            <li>Trên, Trước, Phải, Sau, Trái: cạnh trên của mỗi mặt là phía TRÊN (riêng mặt Trên: cạnh dưới giáp mặt Trước; mặt Dưới: cạnh trên giáp mặt Trước).</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <!-- ========== 3. GIẢI ========== -->
+    <section id="tab-solve" class="panel">
+      <div class="solve-layout">
+        <div class="card player-card">
+          <div id="hold-hint" class="hold-hint"></div>
+          <div id="cube3d" class="cube3d-container" title="Kéo để xoay góc nhìn"></div>
+          <div id="progress" class="progress"><div id="progress-bar"></div></div>
+          <div id="step-counter" class="step-counter"></div>
+          <div id="step-move" class="step-move"></div>
+          <div id="step-desc" class="step-desc"></div>
+          <div class="controls">
+            <button id="btn-first" class="btn" title="Về đầu">⏮</button>
+            <button id="btn-prev" class="btn" title="Bước trước (←)">◀ Trước</button>
+            <button id="btn-next" class="btn primary big" title="Bước tiếp (→)">Tiếp ▶</button>
+            <button id="btn-play" class="btn" title="Tự chạy hết các bước (Space)">⏩ Tự chạy</button>
+          </div>
+          <div class="row wrap center">
+            <label class="slider-row speed">
+              Tốc độ
+              <input id="speed" type="range" min="150" max="1200" value="550" step="50" dir="rtl">
+            </label>
+            <button id="btn-reset-view" class="btn small">↺ Góc nhìn</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Toàn bộ lời giải <span id="solution-length" class="muted"></span></h3>
+          <p class="muted small">Bấm vào một bước để nhảy tới đó.</p>
+          <div id="move-list" class="move-list"></div>
+          <h3>Trạng thái hiện tại</h3>
+          <div id="net-small" class="net small-net"></div>
+          <details class="help">
+            <summary>Cách đọc ký hiệu</summary>
+            <ul>
+              <li><b>R / L / U / D / F / B</b>: mặt Phải / Trái / Trên / Dưới / Trước / Sau.</li>
+              <li>Chữ cái đơn: xoay 90° theo chiều kim đồng hồ <i>khi nhìn thẳng vào mặt đó</i>.</li>
+              <li>Có dấu <b>'</b> (phẩy): xoay ngược chiều kim đồng hồ 90°.</li>
+              <li>Có số <b>2</b>: xoay 180° (chiều nào cũng được).</li>
+              <li>Luôn giữ nguyên cách cầm khối, chỉ xoay đúng một lớp.</li>
+            </ul>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/cube.js?v=20261106"></script>
+  <script src="js/solver.js?v=20261106"></script>
+  <script src="js/vision.js?v=20261106"></script>
+  <script src="js/cube3d.js?v=20261106"></script>
+  <script src="js/app.js?v=20261106"></script>
+</body>
+</html>

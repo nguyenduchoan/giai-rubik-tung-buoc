@@ -1,0 +1,20 @@
+# Ghi chú, script gỡ lỗi và dữ liệu riêng trên máy (không public)
+.local/
+
+# Kết quả kiểm thử trình duyệt
+.e2e-out/
+
+# Ảnh chụp màn hình / file nén tạm ở thư mục gốc
+/photo_*.jpg
+/*.zip
+
+# Node (dự án không có phụ thuộc, phòng khi cài công cụ ngoài)
+node_modules/
+npm-debug.log*
+
+# Hệ điều hành / trình soạn thảo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,33 @@
+{
+  "name": "giai-rubik-tung-buoc",
+  "version": "0.1.0",
+  "description": "Web giải Rubik 3x3 từng bước: chụp 6 mặt bằng camera điện thoại, tự nhận màu, tự ghép/xoay ảnh, giải bằng thuật toán hai pha Kociemba và hướng dẫn bằng mô phỏng 3D.",
+  "private": true,
+  "license": "MIT",
+  "homepage": "https://github.com/nguyenduchoan/giai-rubik-tung-buoc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyenduchoan/giai-rubik-tung-buoc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nguyenduchoan/giai-rubik-tung-buoc/issues"
+  },
+  "keywords": [
+    "rubik",
+    "rubiks-cube",
+    "solver",
+    "kociemba",
+    "computer-vision",
+    "camera",
+    "vietnamese",
+    "vanilla-js"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node tests/solver.test.js && node tests/vision.test.js && node tests/arrange.test.js",
+    "test:e2e": "node scripts/run-e2e.js"
+  }
+}
