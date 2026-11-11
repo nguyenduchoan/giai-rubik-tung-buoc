@@ -9,6 +9,8 @@
   const LIMIT = 200;
   const VERSION = 3;
   const READABLE = [undefined, 2, 3]; // bản cũ không có version (v1) và v2 chỉ có lượt một nước, vẫn đọc được
+  // Mã màu (vision.PALETTE) của từng màu khối: vàng trên, trắng dưới, xanh lá trước, cam phải, đỏ trái, xanh dương sau.
+  const PALETTE = Object.freeze({ U: 1, R: 3, F: 5, D: 0, L: 2, B: 4 });
 
   /*
    * Khối hợp lệ: 54 ô mang sáu màu U R F D L B, mỗi màu 9 ô, các viên ghép được (kiểm tra theo màu tâm) và sáu tâm
@@ -72,9 +74,12 @@
     // Đã giải khi mỗi mặt cùng màu với tâm của nó, ở bất kỳ hướng cầm nào.
     get solved() { return P.isSolved(this.colors); }
     snapshot() { return { version: VERSION, colors: this.colors.slice(), past: this.past.slice(), future: this.future.slice() }; }
+    // 54 mã màu theo bảng màu chung, giữ nguyên vị trí và hướng cầm: đầu vào cho Hướng dẫn giải.
+    paletteColors() { return this.colors.map((color) => PALETTE[color]); }
   }
 
   PlayState.LIMIT = LIMIT;
+  PlayState.PALETTE = PALETTE;
   PlayState.validColors = validColors;
   root.Rubik.PlayState = PlayState;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

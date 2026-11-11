@@ -33,8 +33,8 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     const evaluate = page.evaluate;
     const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const text = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent.trim()`);
-    const waitFor = async (expression, label = expression) => {
-      for (let i = 0; i < 120; i++) {
+    const waitFor = async (expression, label = expression, tries = 120) => {
+      for (let i = 0; i < tries; i++) {
         if (await evaluate(expression)) return;
         await sleep(80);
       }
@@ -314,6 +314,45 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     assert.equal(await evaluate('document.querySelector(".tab.active").dataset.tab'), 'solve');
     assert.equal(await text('#step-move'), '🎉');
     console.log('✓ Tự xoay không sửa lời giải của khối đã nhập');
+
+    // ---------- Hướng dẫn giải từ Chơi tự do ----------
+    // Lưới "Trạng thái hiện tại" của tab giải (54 ô theo thứ tự U R F D L B) hiện đúng khối (ký hiệu màu của sân chơi).
+    const solveNet = () => evaluate('Array.from(document.querySelectorAll("#net-small .grid > *"), (cell) => cell.style.background)');
+    const shows = async (colors) => {
+      const expected = await evaluate(`(() => {
+        const cell = document.createElement('i');
+        return ${JSON.stringify(Array.from(colors))}.map((color) => {
+          cell.style.background = Rubik.vision.PALETTE[Rubik.PlayState.PALETTE[color]].hex;
+          return cell.style.background;
+        });
+      })()`);
+      return JSON.stringify(await solveNet()) === JSON.stringify(expected);
+    };
+    await click('#nav-play'); await reset();
+    assert(await evaluate('document.querySelector("#play-solve").hidden'), 'Khối đã giải thì ẩn nút Hướng dẫn giải');
+    const guided = "R U M' Fw D2 S' L";
+    await evaluate(`document.querySelector("#play-sequence").value = ${JSON.stringify(guided)}`);
+    await click('#play-run');
+    await waitFor('document.querySelector("#play-stop").disabled && !document.querySelector("#play-run").disabled');
+    const before = await snapshot();
+    assert.deepEqual(before.colors, P.applyAll(SOLVED, guided));
+    assert(await evaluate('!document.querySelector("#play-solve").hidden && !document.querySelector("#play-solve").disabled'), 'Khối chưa giải thì hiện nút');
+    await realClick('#play-solve');
+    await waitFor(`!Rubik.play.active && document.querySelector('.tab.active').dataset.tab === 'solve' &&
+      !document.documentElement.classList.contains('play-open') && document.activeElement.id === 'nav-solve'`, 'mở tab Hướng dẫn giải');
+    await waitFor('/[0-9]+ bước/.test(document.querySelector("#solution-length").textContent)', 'có lời giải cho khối mang sang');
+    assert(await shows(before.colors), 'Tab Hướng dẫn giải hiện đúng khối đang chơi, giữ hướng cầm');
+    assert.match(await text('#hold-hint'), /Chơi tự do/);
+    assert.equal(await text('#step-counter'), `Bước 1 / ${(await text('#solution-length')).match(/[0-9]+/)[0]}`);
+    await evaluate('document.querySelector("#speed").value = 150');
+    await click('#btn-play');
+    await waitFor('document.querySelector("#step-move").textContent === "🎉"', 'tự chạy hết lời giải', 400);
+    const finished = await solveNet();
+    assert(finished.length === 54 && C.FACES.every((_, f) => new Set(finished.slice(f * 9, f * 9 + 9)).size === 1), 'Đi hết lời giải thì khối đã giải');
+    assert.deepEqual(await snapshot(), before, 'Hướng dẫn giải không đổi khối đang chơi');
+    await click('#nav-play');
+    await checkColors(before.colors, 'Vào lại Chơi tự do vẫn là khối đang chơi');
+    console.log('✓ Nút Hướng dẫn giải mang nguyên khối đang chơi sang tab 3 và giải từng bước tới khi xong');
     await click('#nav-play'); await reset(); await click('#play-view');
     await screenshot('desktop.png');
 

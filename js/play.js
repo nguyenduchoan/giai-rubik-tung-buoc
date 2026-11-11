@@ -9,7 +9,7 @@
   const $ = (selector) => document.querySelector(selector);
   const KEY = 'rubik-play-v2';
   const LEGACY_KEY = 'rubik-play-v1';
-  const palette = { U: 1, R: 3, F: 5, D: 0, L: 2, B: 4 };
+  const palette = PlayState.PALETTE;
   const hex = (color) => V.PALETTE[palette[color]].hex;
   const colorName = (color) => V.PALETTE[palette[color]].name.toLowerCase();
   const LAYERS = ['U', 'D', 'F', 'B', 'R', 'L', 'M', 'E', 'S'];
@@ -36,6 +36,7 @@
   let panelOpen = null; // null: chưa mở sân chơi lần nào, chọn theo chiều rộng màn hình
   let fullscreenBefore = false;
   let exitHandler = null;
+  let solveHandler = null;
   let pendingFocus = null; // phần tử nhận tiêu điểm sau khi thoát toàn màn hình (khi còn toàn màn hình, phần còn lại của trang bị khóa)
 
   const mode = () => (document.querySelector('input[name="play-mode"]:checked') || {}).value || 'layer1';
@@ -215,6 +216,8 @@
       : `Nước vừa đi: ${model.past.at(-1) || '—'} · Tiếp tục xoay để đưa sáu mặt về cùng màu.`);
     for (const id of ['clockwise', 'counterclockwise', 'half']) $('#play-' + id).disabled = busy() || !buttonsCanTurn();
     for (const id of ['scramble', 'reset', 'run']) $('#play-' + id).disabled = busy();
+    $('#play-solve').hidden = model.solved || !solveHandler;
+    $('#play-solve').disabled = busy();
     $('#play-undo').disabled = busy() || !model.past.length;
     $('#play-redo').disabled = busy() || !model.future.length;
     $('#play-stop').disabled = !running;
@@ -293,6 +296,13 @@
     const target = exitHandler ? exitHandler() : (window.Rubik.play.setActive(false), null);
     if (target) focusLater(target);
   });
+  // Mang nguyên khối đang chơi (màu, vị trí, hướng cầm) sang Hướng dẫn giải; app.js lo phần giải và chuyển tab.
+  $('#play-solve').addEventListener('click', () => {
+    if (!active || busy() || model.solved || !solveHandler) return;
+    view.cancelGesture();
+    const target = solveHandler(model.paletteColors());
+    if (target) focusLater(target);
+  });
   $('#play-fullscreen').addEventListener('click', () => {
     if (isFullscreen()) exitFullscreen();
     else enterFullscreen();
@@ -320,7 +330,7 @@
     if (busy()) return;
     const moves = C.randomScramble(20);
     moves.forEach((move) => model.move(C.moveToString(move)));
-    notice = 'Đã tráo 20 nước. Hãy thử tự giải hoặc chuyển sang Học chơi để ôn lại cách làm.';
+    notice = 'Đã tráo 20 nước. Hãy thử tự giải, hoặc bấm 💡 Hướng dẫn giải để xem từng bước.';
     $('#play-error').textContent = '';
     save();
     render();
@@ -397,6 +407,8 @@
     },
     // Hàm chuyển về tab trước đó khi bấm Quay lại (app.js cung cấp); trả về phần tử cần nhận tiêu điểm.
     setExitHandler(handler) { exitHandler = handler; },
+    // Hàm nhận 54 mã màu của khối đang chơi, mở Hướng dẫn giải (app.js cung cấp); trả về phần tử nhận tiêu điểm hoặc null nếu ở lại.
+    setSolveHandler(handler) { solveHandler = handler; render(); },
     get active() { return active; },
   };
   render();

@@ -38,6 +38,7 @@
     solution: null,
     startColors: null,
     solutionKey: null, // màu đầu vào đã dùng để giải; đầu vào đổi thì lời giải hết hiệu lực
+    solutionOrigin: null, // 'play' khi khối được mang sang từ Chơi tự do
     step: 0,
     playing: false,
     busy: false,
@@ -1541,7 +1542,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111play3');
+    const w = new Worker('js/solver-worker.js?v=20261111solve1');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;
@@ -1579,6 +1580,52 @@
     });
   }
 
+  function syncSolveButton() {
+    const btn = $('#btn-solve');
+    btn.disabled = state.busy;
+    btn.textContent = state.busy ? '⏳ Đang tính lời giải…' : '🧠 Giải ngay';
+  }
+
+  /*
+   * Giải màu đang nhập (đã hợp lệ). Đầu vào được chốt trước khi chờ bộ giải vì người dùng vẫn sửa/tráo/xoá/chụp lại
+   * được trong lúc đó. Mỗi lần giải có mã riêng: lần mới hơn (ví dụ vừa mang khối từ Chơi tự do sang trong lúc bước 2
+   * còn đang tính) thay lần cũ, kết quả của lần cũ bị bỏ qua.
+   */
+  let solveRun = 0;
+  async function solveInput(facelets, origin = null) {
+    const run = ++solveRun;
+    const input = state.colors.slice();
+    const key = inputKey();
+    state.busy = true;
+    syncSolveButton();
+    if (activeTab() === 'solve') renderSolve();
+    try {
+      const moves = await solveAsync(facelets);
+      if (run !== solveRun) return;
+      if (inputKey() !== key) {
+        toast('Dữ liệu đã thay đổi trong lúc tính nên bỏ lời giải cũ – bấm "Giải ngay" lại để giải khối mới.', 5000);
+        return;
+      }
+      state.solution = moves;
+      state.startColors = input;
+      state.solutionKey = key;
+      state.solutionOrigin = origin;
+      state.step = 0;
+      state.playing = false;
+      // Người dùng đã sang tab khác (ví dụ đang chụp) thì không kéo họ đi, chỉ báo.
+      if (activeTab() === 'edit') switchTab('solve');
+      else if (activeTab() !== 'solve') toast(`Đã có lời giải ${moves.length} bước – mở "3. Hướng dẫn giải" để xem.`, 5000);
+    } catch (err) {
+      if (run === solveRun) toast('Lỗi khi giải: ' + (err.message || err), 6000);
+    } finally {
+      if (run === solveRun) {
+        state.busy = false;
+        syncSolveButton();
+        if (activeTab() === 'solve') renderSolve();
+      }
+    }
+  }
+
   $('#btn-solve').addEventListener('click', async () => {
     if (state.busy || blockedByDuplicate()) return;
     let v = C.validateColors(state.colors);
@@ -1592,35 +1639,34 @@
       toast('Chưa thể giải: ' + v.error, 5000);
       return;
     }
-    state.busy = true;
-    const btn = $('#btn-solve');
-    btn.disabled = true;
-    btn.textContent = '⏳ Đang tính lời giải…';
-    // Chốt đầu vào trước khi chờ bộ giải: người dùng vẫn sửa/tráo/xoá/chụp lại được trong lúc đó.
-    const input = state.colors.slice();
-    const key = inputKey();
-    try {
-      const moves = await solveAsync(v.facelets);
-      if (inputKey() !== key) {
-        toast('Dữ liệu đã thay đổi trong lúc tính nên bỏ lời giải cũ – bấm "Giải ngay" lại để giải khối mới.', 5000);
-        return;
-      }
-      state.solution = moves;
-      state.startColors = input;
-      state.solutionKey = key;
-      state.step = 0;
-      state.playing = false;
-      // Người dùng đã sang bước 1 (ví dụ đang chụp) thì không kéo họ đi, chỉ báo.
-      if (activeTab() === 'edit') switchTab('solve');
-      else if (activeTab() === 'solve') renderSolve();
-      else toast(`Đã có lời giải ${moves.length} bước – mở "3. Hướng dẫn giải" để xem.`, 5000);
-    } catch (err) {
-      toast('Lỗi khi giải: ' + (err.message || err), 6000);
-    } finally {
-      state.busy = false;
-      btn.disabled = false;
-      btn.textContent = '🧠 Giải ngay';
+    await solveInput(v.facelets);
+  });
+
+  /*
+   * Chơi tự do → Hướng dẫn giải: lấy nguyên khối đang chơi làm đầu vào, giữ đúng vị trí màu và hướng cầm như trên sân
+   * chơi (không đưa về cách cầm chuẩn) để hướng dẫn khớp với khối người dùng vừa nhìn thấy. Khối này thay cho màu ở
+   * bước 2; nếu đang có ảnh chụp thì hỏi trước.
+   */
+  window.Rubik.play.setSolveHandler((colors) => {
+    const v = C.validateColors(colors);
+    if (!v.ok) {
+      toast('Không đọc được khối đang chơi: ' + v.error, 5000);
+      return null;
     }
+    if (SCAN_ORDER.some((f) => state.scanned[f]) &&
+        !window.confirm('Khối đang chơi sẽ thay cho các mặt đã chụp ở bước 1–2. Tiếp tục mở Hướng dẫn giải?')) return null;
+    state.colors = colors.slice();
+    resetInput();
+    clearArrangeNote();
+    const u = centerOf('U'), f = centerOf('F');
+    state.arrangeNote = {
+      kind: 'ok',
+      html: `🎮 Đây là khối mang sang từ Chơi tự do, giữ nguyên cách cầm: tâm ${chip(u)}<b>${colorName(u)}</b> ở TRÊN, ` +
+        `tâm ${chip(f)}<b>${colorName(f)}</b> hướng về bạn.`,
+    };
+    void solveInput(v.facelets, 'play'); // gọi trước khi mở tab để tab hiện ngay trạng thái "đang tính"
+    switchTab('solve');
+    return document.getElementById('nav-solve');
   });
 
   // ================== 3. HƯỚNG DẪN GIẢI ==================
@@ -1674,6 +1720,7 @@
     state.solution = null;
     state.startColors = null;
     state.solutionKey = null;
+    state.solutionOrigin = null;
     state.step = 0;
     state.playing = false;
   }
@@ -1682,7 +1729,8 @@
     dropStaleSolution();
     if (!state.solution) {
       if (!view3d.animating) view3d.setColors(state.colors.map(hex));
-      $('#hold-hint').innerHTML = 'Chưa có lời giải. Hãy chụp/nhập màu rồi bấm <b>Giải ngay</b> ở bước 2.';
+      $('#hold-hint').innerHTML = state.busy ? '⏳ Đang tính lời giải…'
+        : 'Chưa có lời giải. Hãy chụp/nhập màu rồi bấm <b>Giải ngay</b> ở bước 2.';
       $('#step-counter').textContent = '';
       $('#step-move').textContent = '–';
       $('#step-desc').textContent = '';
@@ -1696,7 +1744,7 @@
     const sol = state.solution;
     const cc = (f) => centerOf(f, state.startColors);
     const tag = (f) => `${chip(cc(f))}<b>${colorName(cc(f))}</b>`;
-    $('#hold-hint').innerHTML =
+    $('#hold-hint').innerHTML = (state.solutionOrigin === 'play' ? '🎮 Khối lấy nguyên từ <b>Chơi tự do</b>. ' : '') +
       `<b>Cách cầm trước khi giải:</b> tâm ${tag('U')} ở <b>TRÊN</b>, tâm ${tag('F')} hướng <b>về phía bạn</b>. ` +
       `Khi đó bên PHẢI là ${tag('R')}, bên TRÁI là ${tag('L')}, phía SAU là ${tag('B')}, dưới ĐÁY là ${tag('D')}. ` +
       'Giữ nguyên cách cầm này đến hết, chỉ xoay từng lớp theo hướng dẫn.';

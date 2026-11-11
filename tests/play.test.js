@@ -477,4 +477,24 @@ for (const [label, fingers, vectors, entry] of [
   assert(played.solved, `${label}: hoàn tác một lần`);
 }
 console.log('✓ Hai ngón với hình học thật: L R, L\' R\', U D\', U E, M\' R');
+
+// ---------- Mang khối đang chơi sang Hướng dẫn giải ----------
+require('../js/vision.js');
+require('../js/solver.js');
+const { vision: V, solver: S } = globalThis.Rubik;
+const centerNames = (colors) => C.FACES.map((_, f) => V.PALETTE[colors[f * 9 + 4]].name);
+assert.deepEqual(centerNames(new PlayState().paletteColors()), ['Vàng', 'Cam', 'Xanh lá', 'Trắng', 'Đỏ', 'Xanh dương'],
+  'Khối đã giải: vàng trên, cam phải, xanh lá trước, trắng dưới, đỏ trái, xanh dương sau');
+for (const sequence of ["R U R' U' F2 D L' B2 U'", "M E S Rw U2 Fw' r M2 D", "Uw' S' R E2 Bw L M' F D2 Lw"]) {
+  const played = new PlayState();
+  P.parseSequence(sequence).forEach((move) => played.move(P.toString(move)));
+  const colors = played.paletteColors();
+  const checked = C.validateColors(colors);
+  assert(checked.ok, `${sequence}: khối mang sang hợp lệ cho bộ giải (${checked.error || ''})`);
+  const solution = S.solve(checked.facelets, { targetLength: 22, timeLimit: 400 });
+  const done = C.applyMoves(colors, solution);
+  assert(P.isSolved(done), `${sequence}: lời giải đưa đúng khối mang sang về đã giải`);
+  assert.deepEqual(centerNames(done), centerNames(colors), `${sequence}: giữ nguyên hướng cầm của sân chơi`);
+}
+console.log('✓ Mang sang Hướng dẫn giải: đúng màu, giữ hướng cầm kể cả khi lớp giữa/hai lớp đã dời tâm, lời giải đưa về đã giải');
 console.log('Rubik tự chơi: mô hình xoay, trạng thái, hướng vuốt và bộ nhận cử chỉ PASS');

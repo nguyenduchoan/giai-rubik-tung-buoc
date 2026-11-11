@@ -26,7 +26,7 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
    - Chụp nhầm thứ tự (ví dụ đổi chỗ Phải/Trái) hoặc cầm lệch hướng (ảnh bị xoay 90°/180°): app **tự đổi chỗ và xoay các ảnh** cho thành khối hợp lệ, rồi đưa về cách cầm chuẩn.
    - Chụp trùng một mặt: app chỉ ra hai ảnh bị trùng và mặt còn thiếu, kèm nút chụp lại.
    - Có ô bị nhận sai màu: **chạm vào ô đó để chọn lại màu**. Ô đáng ngờ có dấu `?`. Khi tìm ra 2 ô bị nhận nhầm cho nhau (đỏ↔cam, trắng↔vàng…), app đánh dấu `!` và có nút "Áp dụng gợi ý".
-3. **Hướng dẫn giải**: lời giải khoảng 20 bước (thuật toán hai pha Kociemba), mô phỏng 3D có hoạt ảnh, mô tả từng bước bằng tiếng Việt kèm màu tâm của mặt cần xoay. Bấm **Tiếp** để đi từng bước, hoặc **Tự chạy** để xem hết một lượt.
+3. **Hướng dẫn giải**: lời giải khoảng 20 bước (thuật toán hai pha Kociemba), mô phỏng 3D có hoạt ảnh, mô tả từng bước bằng tiếng Việt kèm màu tâm của mặt cần xoay. Bấm **Tiếp** để đi từng bước, hoặc **Tự chạy** để xem hết một lượt. Cũng mở được từ nút **💡 Hướng dẫn giải** của Chơi tự do (xem mục 5).
 4. **Học chơi**: tab riêng, không cần chụp hay nhập màu. Có 15 bài theo 4 mức: làm quen, giải cơ bản 7 bước, kết hợp công thức/F2L (giải đồng thời hai tầng đầu), và nhập môn OLL/PLL (định hướng/hoán vị tầng cuối). Mỗi công thức có điều kiện áp dụng, cách chia cụm để nhớ và khối mẫu 3D riêng để tiến/lùi, tự chạy, đổi tốc độ. Đánh dấu bài đã tự làm được; bài đang học và tiến độ được lưu trên trình duyệt. Khi trình duyệt chặn lưu trữ, vẫn học bình thường trong lần mở hiện tại.
 5. **Chơi tự do**: chọn tab này để mở sân chơi phủ kín màn hình. Trình duyệt cho phép thì vào toàn màn hình luôn; nếu bị từ chối hoặc không hỗ trợ (Safari trên iPhone) thì sân chơi vẫn phủ kín trang và có nút ⛶ để thử lại. Điều khiển cảm ứng theo **số ngón đặt cùng lúc rồi kéo**:
    - **1 ngón**: xoay một hàng/cột, kể cả lớp giữa `M/E/S` (kéo qua ô tâm). Đặt ngón thì viên dưới ngón sáng lên; kéo rõ hướng thì cả hàng/cột sẽ xoay sáng lên. Ngón đặt ở vùng nền không xoay khối và không đổi góc nhìn.
@@ -34,6 +34,8 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
    - **3 ngón**: cách duy nhất để đổi góc nhìn bằng cảm ứng; không đổi khối, lịch sử hay nhánh làm lại.
 
    Chuột kéo theo chế độ **1 lớp / 2 lớp / Góc nhìn** trong bảng **Điều khiển** (chế độ 2 lớp vẫn là `Rw`, `Uw`…), kéo vùng nền để nhìn quanh. Bảng này còn có nút chọn lớp (6 mặt và `M/E/S`), xoay 90°/ngược/180°, tráo 20 nước, về khối đã giải, chạy công thức (nhận `M E S`, `Rw` hoặc chữ thường `r`) và lịch sử. Phím R/L/U/D/F/B/M/E/S (Shift để xoay ngược), Ctrl+Z/Ctrl+Y. Khối và tối đa 200 lượt hoàn tác được tự lưu (bản lưu cũ được chuyển sang tự động); nút **Quay lại** về tab trước đó. Rời sân chơi hoặc ẩn trang sẽ hủy cử chỉ đang dở và dừng phần công thức chưa chạy.
+
+   Khi khối chưa giải, dưới khối có nút **💡 Hướng dẫn giải**: bấm vào sẽ mang nguyên khối đang chơi (đúng màu, đúng hướng cầm, kể cả khi lớp giữa/hai lớp đã làm tâm đổi chỗ) sang tab **3. Hướng dẫn giải**, tự tính lời giải và hướng dẫn từng bước. Khối đang chơi không bị đổi; khối mang sang thay cho màu ở bước 2 (nếu đã có ảnh chụp thì app hỏi trước).
 
 ## Chạy trên máy
 

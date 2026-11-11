@@ -542,6 +542,7 @@ html.play-open, html.play-open body { overflow: hidden; overscroll-behavior: non
 .play-stage-bottom { bottom: 0; }
 .play-status { margin: 0 auto; max-width: 640px; line-height: 1.45; }
 .play-gesture-hint { margin: 0; color: #c9d6f2; font-size: 0.88rem; }
+.play-solve { pointer-events: auto; margin: 0 auto 8px; text-shadow: none; box-shadow: 0 4px 14px #0009; }
 .play-screen-note { margin: 4px auto 0; max-width: 560px; color: #ffcf5c; font-size: 0.82rem; line-height: 1.4; }
 .play-screen-note:empty { display: none; }
 .play-panel {
