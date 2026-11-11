@@ -96,13 +96,54 @@
 
   function classifyHeuristic(rgb) {
     const [h, s, v] = rgbToHsv(rgb);
-    if (s < 0.25 || (s < 0.35 && v > 0.8 && (h < 40 || h >= 75))) return 0;
-    if (h >= 345 || h < 10) return 2;
-    if (h < 38) return 3;
-    if (h < 75) return 1;
-    if (h < 170) return 5;
-    if (h < 270) return 4;
+    if (s < 0.25 || (s < 0.35 && v > 0.8 && (h < 40 || h >= 88))) return 0;
+    if (h >= 338 || h < 10 || (h < 16 && rgb[1] < rgb[0] * 0.33)) return 2;
+    if (h < 44 && rgb[1] < rgb[0] * 0.75) return 3;
+    if (h < 84 || (h < 90 && v > 0.65 && rgb[0] >= rgb[1] * 0.72)) return 1;
+    if (h < 182) return 5;
+    if (h < 285) return 4;
     return 2;
+  }
+
+  function labHue(l) {
+    const h = Math.atan2(l[2], l[1]) * (180 / Math.PI);
+    return h < 0 ? h + 360 : h;
+  }
+
+  /*
+   * Phân loại 9 ô của cùng một mặt (chụp trong cùng một khung hình, cùng điều kiện ánh sáng).
+   * Nếu trên cùng một mặt có cả ô Đỏ và ô Cam (hoặc cả ô Vàng và ô Xanh lá) nhưng ánh sáng làm
+   * ngưỡng tĩnh gộp cả hai về cùng một nhãn, tách chúng theo độ lệch sắc độ/độ sáng tương đối trong Lab.
+   */
+  function classifyGrid(rgbs) {
+    const colors = rgbs.map(classifyHeuristic);
+    const labs = rgbs.map(rgbToLab);
+
+    const splitPair = (lowId, highId, scoreFn, minSpan, minDist) => {
+      const idxs = [];
+      for (let i = 0; i < rgbs.length; i++) {
+        if (colors[i] === lowId || colors[i] === highId) idxs.push(i);
+      }
+      if (idxs.length < 2) return;
+      const distinctLabels = new Set(idxs.map((i) => colors[i])).size;
+      if (distinctLabels > 1) return;
+      const scores = idxs.map((i) => scoreFn(labs[i], rgbs[i]));
+      let minIdx = 0, maxIdx = 0;
+      for (let k = 1; k < scores.length; k++) {
+        if (scores[k] < scores[minIdx]) minIdx = k;
+        if (scores[k] > scores[maxIdx]) maxIdx = k;
+      }
+      if (scores[maxIdx] - scores[minIdx] < minSpan) return;
+      if (labDist(labs[idxs[minIdx]], labs[idxs[maxIdx]]) < minDist) return;
+      const mid = (scores[minIdx] + scores[maxIdx]) / 2;
+      idxs.forEach((i, k) => { colors[i] = scores[k] < mid ? lowId : highId; });
+    };
+
+    // Đỏ (2) vs Cam (3): Cam có góc sắc độ Lab (nghiêng về vàng) và độ sáng L* cao hơn Đỏ.
+    splitPair(2, 3, (l) => labHue(l) + 0.5 * l[0], 18, 16);
+    // Vàng (1) vs Xanh lá (5): Xanh lá có góc sắc độ Lab lớn hơn (a* âm mạnh) và độ sáng thấp hơn Vàng.
+    splitPair(1, 5, (l) => labHue(l) - 0.4 * l[0], 22, 20);
+    return colors;
   }
 
   function quantile(hist, n, q) {
@@ -219,10 +260,21 @@
     const votes = Array.from({ length: 6 }, () => new Array(6).fill(0));
     rgbs.forEach((rgb, i) => { votes[assign[i]][classifyHeuristic(rgb)]++; });
     const palLabs = PALETTE.map((p) => rgbToLab(p.ref));
+    const chroma = (lab) => Math.hypot(lab[1], lab[2]);
     let bestPerm = PERMS6[0], bestCost = Infinity;
     for (const perm of PERMS6) {
       let cost = 0;
-      for (let k = 0; k < 6; k++) cost += -votes[k][perm[k]] * 10 + labDist(refs[k], palLabs[perm[k]]) * 0.05;
+      const byColor = new Array(6);
+      for (let k = 0; k < 6; k++) {
+        byColor[perm[k]] = refs[k];
+        cost += -votes[k][perm[k]] * 10 + labDist(refs[k], palLabs[perm[k]]);
+      }
+      const W = byColor[0], Y = byColor[1], R = byColor[2], O = byColor[3], B = byColor[4], G = byColor[5];
+      // Ràng buộc thứ tự tương đối bất biến dưới mọi điều kiện ánh sáng (tránh đảo cụm Đỏ↔Cam, Vàng↔Xanh lá/Xanh dương):
+      if (labHue(O) + 0.5 * O[0] <= labHue(R) + 0.5 * R[0]) cost += 1000;
+      if (labHue(Y) <= labHue(O) || labHue(G) <= labHue(Y)) cost += 1000;
+      if (G[2] <= B[2]) cost += 1000;
+      if (chroma(W) >= chroma(Y) || chroma(W) >= chroma(O)) cost += 1000;
       if (cost < bestCost) { bestCost = cost; bestPerm = perm; }
     }
     return assign.map((k) => bestPerm[k]);
@@ -294,7 +346,7 @@
   }
 
   root.Rubik.vision = {
-    PALETTE, rgbToHsv, rgbToLab, classifyHeuristic, sampleGrid, sampleGridDetailed, classifyAll, colorDistance,
+    PALETTE, rgbToHsv, rgbToLab, classifyHeuristic, classifyGrid, sampleGrid, sampleGridDetailed, classifyAll, colorDistance,
     suspectCells, duplicateCenters,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -104,6 +104,7 @@
     document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + name));
     if (name !== 'scan') stopCamera();
     closePicker();
+    if (name !== 'edit') selectedBrush = null;
     if (name !== 'solve') state.playing = false;
     if (name === 'edit') renderEditor();
     if (name === 'scan') {
@@ -247,7 +248,7 @@
       cam.smoothRgb = detail.rgb.map((rgb) => rgb.slice());
     }
 
-    const rawColors = cam.smoothRgb.map(V.classifyHeuristic);
+    const rawColors = V.classifyGrid(cam.smoothRgb);
     if (!cam.live || !cam.candColors) {
       cam.live = rawColors.slice();
       cam.candColors = rawColors.slice();
@@ -294,7 +295,7 @@
     const rgbs = V.sampleGrid(frameCtx, x, y, s);
     return {
       rgb: rgbs,
-      colors: rgbs.map(V.classifyHeuristic),
+      colors: V.classifyGrid(rgbs),
       canvas: frame,
     };
   }
@@ -572,7 +573,7 @@
         setMode('image');
         const { x, y, s } = gridRect();
         const rgbs = V.sampleGrid(frameCtx, x, y, s);
-        captureToPreview({ rgb: rgbs, colors: rgbs.map(V.classifyHeuristic), canvas: frame }, { flash: false });
+        captureToPreview({ rgb: rgbs, colors: V.classifyGrid(rgbs), canvas: frame }, { flash: false });
         toast('Kiểm tra màu xem trước (kéo khung lưới nếu lệch) rồi bấm "Xác nhận màu".');
       };
       img.onerror = fail;
@@ -593,8 +594,9 @@
     if (!cam.preview || !frame.width) return;
     const { x, y, s } = gridRect();
     const rgbs = V.sampleGrid(frameCtx, x, y, s);
+    const autoColors = V.classifyGrid(rgbs);
     cam.preview.rgb = rgbs;
-    cam.preview.colors = rgbs.map((rgb, k) => (cam.preview.edited[k] ? cam.preview.colors[k] : V.classifyHeuristic(rgb)));
+    cam.preview.colors = rgbs.map((_, k) => (cam.preview.edited[k] ? cam.preview.colors[k] : autoColors[k]));
     renderPreviewBox();
     if (!state.scanned[currentFace()] || state.reshoot) renderMiniFace($('#current-preview'), cam.preview.colors);
   }
@@ -604,7 +606,18 @@
     resamplePreviewGrid();
   });
 
-  // Kéo khung lưới.
+  function triggerPreviewCellPick(k, anchor) {
+    if (cam.mode === 'camera' && !cam.preview && cam.live) {
+      captureToPreview(null, { flash: false });
+    }
+    if (!cam.preview && !state.scanned[currentFace()]) return;
+    ensurePreviewGridButtons();
+    const btn = anchor || $('#capture-preview-grid').children[k];
+    if (pickerPreviewCell === k) closePicker();
+    else openPreviewPicker(k, btn);
+  }
+
+  // Kéo khung lưới (hoặc chạm vào một ô trong khung 3x3 để chọn lại màu).
   (function enableGridDrag() {
     let drag = null;
     const toFrame = (e) => {
@@ -616,19 +629,32 @@
     };
     canvas.addEventListener('pointerdown', (e) => {
       if (!cam.mode) return;
-      drag = { p: toFrame(e), cx: cam.cx, cy: cam.cy };
+      drag = { p: toFrame(e), cx: cam.cx, cy: cam.cy, sx: e.clientX, sy: e.clientY, moved: false };
       canvas.setPointerCapture(e.pointerId);
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!drag) return;
+      if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 8) drag.moved = true;
+      if (!drag.moved) return;
       const p = toFrame(e);
       cam.cx = Math.max(0, Math.min(1, drag.cx + (p.x - drag.p.x) / frame.width));
       cam.cy = Math.max(0, Math.min(1, drag.cy + (p.y - drag.p.y) / frame.height));
       resamplePreviewGrid();
     });
-    const end = () => { drag = null; };
-    canvas.addEventListener('pointerup', end);
-    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('pointerup', (e) => {
+      if (!drag) return;
+      const wasTap = !drag.moved;
+      const p = toFrame(e);
+      drag = null;
+      if (!wasTap || !frame.width) return;
+      const { x, y, s } = gridRect();
+      if (p.x >= x && p.x < x + s && p.y >= y && p.y < y + s) {
+        const col = Math.min(2, Math.floor(((p.x - x) / s) * 3));
+        const row = Math.min(2, Math.floor(((p.y - y) / s) * 3));
+        triggerPreviewCellPick(row * 3 + col);
+      }
+    });
+    canvas.addEventListener('pointercancel', () => { drag = null; });
   })();
 
   function flashFeedback() {
@@ -687,7 +713,13 @@
     const rgbs = snap.rgb;
     const colors = snap.colors;
     const edited = snap.edited || null;
-    const face = currentFace();
+    // Nếu mặt có tâm này đã được xác nhận trước đó, cập nhật trực tiếp vào chính mặt của tâm đó
+    // (bấm xác nhận nhiều lần trên cùng 1 tâm sẽ chỉ lấy ảnh cuối cùng của tâm đó, không tốn thêm lượt chụp).
+    const sameCenter = SCAN_ORDER.find((f) => state.scanned[f] && centerOf(f) === colors[4]);
+    const face = sameCenter ||
+      ((!state.reshoot && state.scanned[currentFace()])
+        ? (SCAN_ORDER.find((f) => !state.scanned[f]) || currentFace())
+        : currentFace());
     const off = FACE_OFFSET[face];
     rgbs.forEach((rgb, k) => {
       state.rgb[off + k] = rgb.slice();
@@ -723,14 +755,17 @@
       return;
     }
     const dup = duplicateFace(rgbs, colors[4], !!(edited && edited[4]));
-    const next = SCAN_ORDER.findIndex((f, i) => i > state.scanIndex && !state.scanned[f]);
+    const next = SCAN_ORDER.findIndex((f, i) => i >= state.scanIndex && !state.scanned[f]);
     state.scanIndex = next >= 0 ? next : SCAN_ORDER.findIndex((f) => !state.scanned[f]);
     const count = SCAN_ORDER.filter((f) => state.scanned[f]).length;
-    if (dup) {
+    if (sameCenter) {
+      toast(`✓ Đã cập nhật ảnh mới nhất cho mặt tâm ${colorName(colors[4])} (Ảnh ${SCAN_ORDER.indexOf(face) + 1}). ` +
+        `Đã có ${count}/6 mặt – hãy xoay sang mặt chưa chụp.`, 3500);
+    } else if (dup && dup !== face) {
       toast(`⚠ Mặt vừa xác nhận có tâm ${colorName(centerOf(face))} giống một mặt đã lưu – có thể bạn chụp trùng. ` +
         'Bấm vào ảnh trong danh sách để chụp lại.', 6000);
     } else {
-      toast(`Đã xác nhận ${count}/6 mặt. Xoay sang một mặt chưa chụp.`, 2000);
+      toast(`Đã xác nhận mặt tâm ${colorName(colors[4])} (${count}/6 mặt). Xoay sang một mặt chưa chụp.`, 2200);
     }
     renderScanGuide();
   }
@@ -779,9 +814,18 @@
   function renderMiniFace(el, ids, tiny = false) {
     el.className = 'mini-face' + (tiny ? ' tiny' : '');
     el.innerHTML = '';
+    const interactive = el.id === 'current-preview' && !!ids;
     for (let k = 0; k < 9; k++) {
       const s = document.createElement('span');
       s.style.background = ids ? hex(ids[k]) : EMPTY_COLOR;
+      if (interactive) {
+        s.style.cursor = 'pointer';
+        s.title = `Hàng ${Math.floor(k / 3) + 1} cột ${(k % 3) + 1}: ${colorName(ids[k])} (chạm để đổi màu)`;
+        s.addEventListener('click', (e) => {
+          e.stopPropagation();
+          triggerPreviewCellPick(k);
+        });
+      }
       el.appendChild(s);
     }
   }
@@ -798,12 +842,7 @@
       b.dataset.previewCell = String(k);
       b.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (cam.mode === 'camera' && !cam.preview && cam.live) {
-          captureToPreview(null, { flash: false });
-        }
-        if (!cam.preview && !state.scanned[currentFace()]) return;
-        if (pickerPreviewCell === k) closePicker();
-        else openPreviewPicker(k, b);
+        triggerPreviewCellPick(k, b);
       });
       grid.appendChild(b);
     }
@@ -830,13 +869,19 @@
       edited = cam.preview.edited;
       interactive = true;
       box.classList.add('is-preview');
+      const sameCenter = SCAN_ORDER.find((f) => state.scanned[f] && centerOf(f) === colors[4]);
+      const targetIdx = sameCenter ? SCAN_ORDER.indexOf(sameCenter) + 1 : idx;
       const dup = duplicateFace(cam.preview.rgb, colors[4], edited[4]);
-      title.innerHTML = `📋 Xem trước màu vừa chụp · Ảnh ${idx}/6 (tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>)`;
-      hint.innerHTML = dup
-        ? `<span class="warn-text">⚠ Tâm ${colorName(colors[4])} trùng với Ảnh ${SCAN_ORDER.indexOf(dup) + 1} đã lưu – kiểm tra lại hoặc bấm “Chụp lại”.</span>`
-        : 'Kiểm tra 9 ô màu vừa chụp. <b>Chạm vào ô bị sai</b> để chọn lại màu, rồi bấm <b>“Xác nhận màu”</b>.';
+      title.innerHTML = sameCenter
+        ? `📋 Xem trước · cập nhật mặt tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b> (Ảnh ${targetIdx}/6)`
+        : `📋 Xem trước màu vừa chụp · Ảnh ${idx}/6 (tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>)`;
+      hint.innerHTML = sameCenter
+        ? `<span class="warn-text">Mặt tâm <b>${colorName(colors[4])}</b> đã lưu ở Ảnh ${targetIdx}. <b>Chạm vào ô sai</b> để đổi màu, hoặc bấm xác nhận để cập nhật ảnh mới nhất cho tâm này.</span>`
+        : dup
+          ? `<span class="warn-text">⚠ Tâm ${colorName(colors[4])} trùng với Ảnh ${SCAN_ORDER.indexOf(dup) + 1} đã lưu – kiểm tra lại hoặc bấm “Chụp lại”.</span>`
+          : 'Kiểm tra 9 ô màu vừa chụp. <b>Chạm vào ô bị sai</b> để chọn lại màu, rồi bấm <b>“Xác nhận màu”</b>.';
       btnConfirm.disabled = false;
-      btnConfirm.textContent = '✅ Xác nhận màu mặt này';
+      btnConfirm.textContent = sameCenter ? `✅ Cập nhật mặt tâm ${colorName(colors[4])}` : '✅ Xác nhận màu mặt này';
       btnRetake.hidden = false;
       btnRetake.textContent = cam.mode === 'image' ? '🔄 Chọn ảnh khác' : '🔄 Chụp lại';
       btnRot.disabled = false;
@@ -847,13 +892,19 @@
       interactive = !!cam.live;
       box.classList.remove('is-preview');
       if (cam.live) {
+        const sameCenter = SCAN_ORDER.find((f) => state.scanned[f] && centerOf(f) === colors[4]);
+        const targetIdx = sameCenter ? SCAN_ORDER.indexOf(sameCenter) + 1 : idx;
         const dup = duplicateFace(cam.liveRgb, colors[4]);
-        title.innerHTML = `Đang nhận diện Ảnh ${idx}/6 · tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>`;
-        hint.innerHTML = dup
-          ? `<span class="warn-text">⚠ Mặt tâm ${colorName(colors[4])} đã lưu ở Ảnh ${SCAN_ORDER.indexOf(dup) + 1} – hãy xoay sang mặt khác.</span>`
-          : 'Khi nhận diện đúng màu, bấm <b>“Chụp mặt này”</b> để dừng hình kiểm tra, hoặc <b>“Xác nhận màu”</b> để lưu ngay.';
+        title.innerHTML = sameCenter
+          ? `Đang ngắm mặt tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b> (đã lưu ở Ảnh ${targetIdx}/6)`
+          : `Đang nhận diện Ảnh ${idx}/6 · tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>`;
+        hint.innerHTML = sameCenter
+          ? `<span class="warn-text">Mặt tâm <b>${colorName(colors[4])}</b> đã lưu ở Ảnh ${targetIdx}. Bấm xác nhận nếu muốn <b>cập nhật lại ảnh cuối</b> cho tâm này, hoặc xoay sang mặt khác.</span>`
+          : dup
+            ? `<span class="warn-text">⚠ Mặt tâm ${colorName(colors[4])} đã lưu ở Ảnh ${SCAN_ORDER.indexOf(dup) + 1} – hãy xoay sang mặt khác.</span>`
+            : 'Khi nhận diện đúng màu, bấm <b>“Chụp mặt này”</b> để dừng hình kiểm tra/sửa màu, hoặc <b>“Xác nhận màu”</b> để lưu ngay.';
         btnConfirm.disabled = false;
-        btnConfirm.textContent = '✅ Xác nhận màu';
+        btnConfirm.textContent = sameCenter ? `✅ Cập nhật mặt tâm ${colorName(colors[4])}` : '✅ Xác nhận màu';
       } else {
         title.innerHTML = `Đang chờ nhận diện Ảnh ${idx}/6…`;
         hint.innerHTML = 'Đặt mặt Rubik vào vừa khít khung 3×3 trên camera.';
@@ -932,7 +983,7 @@
       li.appendChild(name);
       const st = document.createElement('span');
       st.className = 'status';
-      st.textContent = state.scanned[f] ? 'Đã xác nhận ✓ (chụp lại)' : 'Chưa chụp';
+      st.textContent = state.scanned[f] ? 'Đã xác nhận ✓ (sửa / chụp lại)' : 'Chưa chụp';
       li.appendChild(st);
       li.addEventListener('click', () => {
         closePicker();
@@ -981,7 +1032,8 @@
     const allClassified = withOverrides(V.classifyAll(state.rgb));
     const allValid = C.validateColors(allClassified).ok || C.autoArrange(allClassified).ok ||
       !!C.findSwapFix(allClassified, V.suspectCells(state.rgb, allClassified));
-    state.colors = allValid ? allClassified : confirmed;
+    const confirmedFixable = !!C.findSwapFix(confirmed, V.suspectCells(state.rgb, confirmed));
+    state.colors = allValid ? allClassified : (confirmedFixable ? confirmed : allClassified);
     return autoFix();
   }
 
@@ -1243,7 +1295,8 @@
   document.addEventListener('pointerdown', (e) => {
     if (picker.hidden) return;
     if (e.target.closest('#color-picker') || e.target.closest('#net .grid button') ||
-        e.target.closest('#capture-preview-grid button')) return;
+        e.target.closest('#capture-preview-grid button') || e.target.closest('#current-preview') ||
+        e.target.closest('#camera-canvas')) return;
     closePicker();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
@@ -1298,6 +1351,7 @@
 
   // ================== 2. KIỂM TRA MÀU ==================
   const NET_POS = { U: [1, 2], L: [2, 1], F: [2, 2], R: [2, 3], B: [2, 4], D: [3, 2] };
+  let selectedBrush = null; // màu đang chọn ở bảng màu trên cùng để tô nhanh (null = chạm ô mở hộp chọn màu)
 
   function renderNet(container, colors, { editable = false, badColors = null, suspects = null } = {}) {
     container.innerHTML = '';
@@ -1314,7 +1368,7 @@
         el.style.background = hex(colors[idx]);
         if (editable) {
           el.type = 'button';
-          el.title = `${face}${k + 1}: ${colorName(colors[idx])}`;
+          el.title = `${face}${k + 1}: ${colorName(colors[idx])} (chạm để sửa màu)`;
           if (k === 4) el.classList.add('center');
           if (badColors && badColors.has(colors[idx])) el.classList.add('bad');
           const sug = state.suggestion;
@@ -1322,6 +1376,11 @@
           else if (suspects && suspects.has(idx)) el.classList.add('suspect');
           el.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (selectedBrush !== null) {
+              closePicker();
+              setCellColor(idx, selectedBrush);
+              return;
+            }
             if (pickerIdx === idx) closePicker();
             else openPicker(idx, el);
           });
@@ -1366,10 +1425,20 @@
     const el = $('#palette');
     el.innerHTML = '';
     PAL.forEach((p) => {
-      const b = document.createElement('span');
-      b.className = 'swatch';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch' + (selectedBrush === p.id ? ' active' : '');
+      b.dataset.paletteColor = String(p.id);
+      b.title = selectedBrush === p.id
+        ? `Đang chọn cọ màu ${p.name} – chạm vào các ô bên dưới để tô, hoặc chạm lại vào đây để tắt cọ`
+        : `Chạm để chọn màu ${p.name} rồi tô nhanh lên các ô bên dưới`;
       const n = counts[p.id] || 0;
       b.innerHTML = `<i style="background:${p.hex}"></i>${p.name} <span class="count ${n === 9 ? '' : 'bad'}">${n}/9</span>`;
+      b.addEventListener('click', () => {
+        selectedBrush = selectedBrush === p.id ? null : p.id;
+        closePicker();
+        renderPalette(counts);
+      });
       el.appendChild(b);
     });
   }

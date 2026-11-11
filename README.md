@@ -18,7 +18,8 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
 ## Tính năng
 
 1. **Chụp các mặt**: mở trên điện thoại, app tự hỏi quyền camera. Đưa từng mặt vào khung 3×3:
-   - App nhận diện và làm mượt 9 ô màu theo thời gian thực ngay bên dưới camera. Khi thấy màu đã nhận đúng, bạn có thể bấm **✅ Xác nhận màu** ngay, hoặc bấm **📸 Chụp mặt này** để dừng hình và mở khung **Xem trước màu vừa chụp** (có thể chạm vào từng ô trong khung xem trước để sửa màu hoặc xoay 90°, rồi bấm **✅ Xác nhận màu mặt này** / **🔄 Chụp lại**).
+   - App nhận diện và làm mượt 9 ô màu theo thời gian thực ngay bên dưới camera. Khi thấy màu đã nhận đúng, bạn có thể bấm **✅ Xác nhận màu** ngay, hoặc bấm **📸 Chụp mặt này** để dừng hình và mở khung **Xem trước màu vừa chụp** (có thể chạm trực tiếp vào từng ô trên ảnh camera, khung xem trước hoặc hình mặt bên phải để sửa màu, xoay 90°, rồi bấm **✅ Xác nhận màu mặt này** / **🔄 Chụp lại**).
+   - **Xác nhận theo màu tâm**: nếu bạn bấm xác nhận nhiều lần trên cùng một tâm để lấy ảnh chuẩn nhất, app chỉ cập nhật ảnh cuối cùng vào đúng tâm đó, không tạo thêm ảnh trùng tâm và không làm mất lượt chụp của các mặt còn lại.
    - Chốt mẫu màu ổn định ngay trước thao tác chạm nút để tránh rung tay làm nhảy màu khi bấm chụp.
    - Tùy chọn **🎥 Tự chụp khi giữ yên** (mặc định tắt) giúp tự dừng hình vào khung xem trước khi giữ yên khối Rubik khoảng 1 giây. Vẫn hỗ trợ "Chụp bằng app camera" và "Chọn ảnh có sẵn".
 2. **Kiểm tra màu**:

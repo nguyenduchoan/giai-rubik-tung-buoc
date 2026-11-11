@@ -6,6 +6,14 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ### Thay đổi & Cải tiến
 
+- **Xác nhận chụp theo màu tâm**: khi bấm xác nhận cho mặt có màu tâm đã lưu trước đó, app tự động **cập nhật ảnh mới nhất vào đúng tâm đó** thay vì tạo thêm ảnh mới và làm mất lượt chụp của các mặt còn lại (ví dụ bấm xác nhận 3 lần liên tiếp trên cùng 1 tâm chỉ cập nhật ảnh cuối cùng của tâm đó).
+- **Khắc phục nhầm màu Đỏ↔Cam và Vàng↔Xanh lá/Xanh dương**:
+  - Mở rộng vùng nhận diện Đỏ dưới ánh sáng vàng ấm (`g/r` thấp), Cam ấm (`h` tới 44°), Vàng ánh chanh (`h` tới 84–90° trên speedcube/đèn LED) và Xanh lá ánh lạnh (`h` tới 182°).
+  - Thêm `classifyGrid` tách tương đối Đỏ↔Cam và Vàng↔Xanh lá ngay trong cùng khung hình 9 ô khi có cả hai màu trên một mặt.
+  - Bổ sung ràng buộc thứ tự sắc độ/độ sáng tương đối trong không gian Lab cho `classifyAll` để không bao giờ đảo cụm Đỏ↔Cam hay Vàng↔Xanh lá/Xanh dương.
+- **Chọn lại màu trực tiếp sau khi chụp**:
+  - Ở Bước 1: chạm trực tiếp vào ô màu ngay trên khung ảnh camera (`#camera-canvas`), khung xem trước (`#capture-preview-grid`) hoặc hình mặt bên phải (`#current-preview`) để mở bảng chọn lại màu.
+  - Ở Bước 2: hỗ trợ cả 2 cách sửa màu — chạm trực tiếp vào ô sai trên lưới để mở bảng chọn màu, hoặc bấm chọn một màu ở thanh bảng màu (`#palette`) làm cọ vẽ rồi chạm liên tiếp vào các ô cần tô.
 - **Chụp và xác nhận màu từng mặt (Bước 1)**:
   - Thêm khung **Xem trước & xác nhận màu** (`#face-preview-box`) ngay dưới khung camera: hiển thị trực tiếp 9 ô màu đang nhận diện, cho phép bấm **✅ Xác nhận màu** ngay khi thấy màu đã đúng, hoặc bấm **📸 Chụp mặt này** để dừng hình, kiểm tra preview 9 ô màu (có thể chạm trực tiếp vào ô bất kỳ trên preview để đổi màu hoặc xoay 90°) rồi chọn **✅ Xác nhận màu mặt này** hoặc **🔄 Chụp lại**.
   - Tắt mặc định chế độ **🎥 Tự chụp khi giữ yên** để app không tự ý chụp và nhảy mặt liên tục khi người dùng chưa xác nhận; khi bật tùy chọn này, giữ yên 1 giây sẽ dừng hình vào chế độ xem trước chờ người dùng xác nhận.
