@@ -28,7 +28,12 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
    - Có ô bị nhận sai màu: **chạm vào ô đó để chọn lại màu**. Ô đáng ngờ có dấu `?`. Khi tìm ra 2 ô bị nhận nhầm cho nhau (đỏ↔cam, trắng↔vàng…), app đánh dấu `!` và có nút "Áp dụng gợi ý".
 3. **Hướng dẫn giải**: lời giải khoảng 20 bước (thuật toán hai pha Kociemba), mô phỏng 3D có hoạt ảnh, mô tả từng bước bằng tiếng Việt kèm màu tâm của mặt cần xoay. Bấm **Tiếp** để đi từng bước, hoặc **Tự chạy** để xem hết một lượt.
 4. **Học chơi**: tab riêng, không cần chụp hay nhập màu. Có 15 bài theo 4 mức: làm quen, giải cơ bản 7 bước, kết hợp công thức/F2L (giải đồng thời hai tầng đầu), và nhập môn OLL/PLL (định hướng/hoán vị tầng cuối). Mỗi công thức có điều kiện áp dụng, cách chia cụm để nhớ và khối mẫu 3D riêng để tiến/lùi, tự chạy, đổi tốc độ. Đánh dấu bài đã tự làm được; bài đang học và tiến độ được lưu trên trình duyệt. Khi trình duyệt chặn lưu trữ, vẫn học bình thường trong lần mở hiện tại.
-5. **Chơi tự do**: tự xoay Rubik ảo trên tab riêng. Vuốt hàng/cột ngoài để xoay lớp; kéo ô tâm hoặc nền để đổi góc nhìn. Có chọn mặt và nút xoay 90°/ngược/180°, phím R/L/U/D/F/B (Shift để xoay ngược), hoàn tác/làm lại, tráo 20 nước, trở về khối đã giải và chạy công thức nhập tay. Khối và tối đa 200 nước hoàn tác được tự lưu; chuyển sang bài học không mất khối đang chơi. Rời tab hoặc ẩn trang sẽ dừng phần công thức chưa chạy. Các lớp giữa dùng ký hiệu M/E/S chưa được hỗ trợ.
+5. **Chơi tự do**: chọn tab này để mở sân chơi phủ kín màn hình. Trình duyệt cho phép thì vào toàn màn hình luôn; nếu bị từ chối hoặc không hỗ trợ (Safari trên iPhone) thì sân chơi vẫn phủ kín trang và có nút ⛶ để thử lại. Điều khiển cảm ứng theo **số ngón đặt cùng lúc rồi kéo**:
+   - **1 ngón**: xoay một hàng/cột, kể cả lớp giữa `M/E/S` (kéo qua ô tâm). Một ngón kéo ở vùng nền đổi góc nhìn.
+   - **2 ngón**: một ngón làm mốc trên hàng/cột ngoài, ngón kia đặt bất kỳ đâu trong sân chơi, kéo cùng hướng để xoay lớp ngoài cùng lớp giữa kề nó (`Rw`, `Uw`…), tính là một nước.
+   - **3 ngón**: xoay tự do góc nhìn; không đổi khối, lịch sử hay nhánh làm lại.
+
+   Chuột kéo theo chế độ **1 lớp / 2 lớp / Góc nhìn** trong bảng **Điều khiển**. Bảng này còn có nút chọn lớp (6 mặt và `M/E/S`), xoay 90°/ngược/180°, tráo 20 nước, về khối đã giải, chạy công thức (nhận `M E S`, `Rw` hoặc chữ thường `r`) và lịch sử. Phím R/L/U/D/F/B/M/E/S (Shift để xoay ngược), Ctrl+Z/Ctrl+Y. Khối và tối đa 200 nước hoàn tác được tự lưu (bản lưu cũ được chuyển sang tự động); nút **Quay lại** về tab trước đó. Rời sân chơi hoặc ẩn trang sẽ hủy cử chỉ đang dở và dừng phần công thức chưa chạy.
 
 ## Chạy trên máy
 
@@ -83,7 +88,9 @@ Mẹo: chụp nơi đủ sáng, tránh lóa, đặt mặt Rubik vừa khít khun
 | `js/cube3d.js` | Khối 3D bằng CSS transform + hoạt ảnh xoay |
 | `js/app.js` | Điều khiển giao diện và luồng 3 bước |
 | `js/lessons.js`, `js/learn.js` | Nội dung lộ trình, công thức, mô phỏng học độc lập và lưu tiến độ |
-| `js/play-state.js`, `js/play.js` | Trạng thái khối tự chơi, lịch sử hoàn tác/làm lại, công thức và lưu khối |
+| `js/play-moves.js` | Ký hiệu và phép xoay của Chơi tự do: lớp ngoài, lớp giữa `M/E/S`, hai lớp `Rw/Uw…` |
+| `js/play-gesture.js` | Bộ nhận cử chỉ 1/2/3 ngón (không dùng DOM): ghép ngón, khóa chế độ, hủy, chốt nước |
+| `js/play-state.js`, `js/play.js` | Trạng thái khối tự chơi, lịch sử hoàn tác/làm lại, lưu khối; sân chơi toàn màn hình, nút, bàn phím và công thức |
 | `tests/` | Kiểm thử Node và kiểm thử trình duyệt (camera giả) |
 | `test-images/` | 6 ảnh mặt mẫu để thử thủ công |
 | `scripts/` | Máy chủ tĩnh, chạy kiểm thử trình duyệt, script triển khai |
@@ -103,8 +110,8 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
 | `node tests/lessons.test.js` | Tác dụng và điều kiện khối mẫu của từng công thức, bảo toàn các phần đã giải, kiểm tra hướng góc và hoán vị cạnh |
 | `node tests/e2e-learn.js` | Tab học: tiến/lùi, tự chạy/dừng, đổi bài/công thức giữa hoạt ảnh, giữ nguyên lời giải thật, lưu tiến độ, lưu trữ bị chặn và bố cục điện thoại |
-| `node tests/play.test.js` | Xoay 18 nước chuẩn, lịch sử/lưu trạng thái, khối hợp lệ và suy ra lớp/chiều từ hướng vuốt |
-| `node tests/e2e-play.js` | Nút/bàn phím, chuột và cảm ứng thật, đổi góc nhìn, chạy/dừng công thức, lưu khối, dữ liệu lưu hỏng, bảo toàn bài học/lời giải và bố cục điện thoại |
+| `node tests/play.test.js` | 45 kiểu nước đối chiếu phép biến đổi độc lập (`Rw = R M'`, `M' = L R' x`…), lịch sử/lưu/chuyển bản lưu cũ, từ chối ảnh gương, suy ra lớp/chiều từ hướng vuốt và các ca của bộ nhận cử chỉ (ghép ngón, thêm/nhấc ngón, lệch hướng, 4 ngón, hủy) |
+| `node tests/e2e-play.js` | Toàn màn hình (mở bằng thao tác thật, bị từ chối, thoát, Quay lại), nút/bàn phím/công thức, chuột, chạm 1/2/3/4 ngón thật qua giao thức Chrome, lưu khối và bản lưu cũ, bảo toàn bài học/lời giải, bố cục 320–390 px dọc/ngang và máy tính |
 | `npm run test:e2e` | Chrome headless + camera giả: tự chụp, sửa màu, giải hết, huỷ lời giải khi dữ liệu đổi, chuyển qua lại giữa camera và ảnh (kể cả ảnh hỏng, quyền camera trả về chậm). Kịch bản `MISTAKES=0` chụp đúng; `1` nhầm thứ tự/hướng; `2` thứ tự và chiều hoàn toàn tuỳ ý; `3` thêm 2 ô đỏ/cam bị nhận nhầm. Chạy riêng một kịch bản: `MISTAKES=2 npm run test:e2e`. |
 | `node tests/e2e-state.js` | Nhập ảnh qua "Chọn ảnh có sẵn": chụp trùng thì chặn giải và huỷ lời giải cũ, giải lại khi hình 3D đang xoay, chụp lại/quay lại bước chụp không mất màu đã sửa, chụp thiếu mặt + tô tay, lời giải xong khi đang ở bước khác, khoá giữ màn hình, tự cập nhật không mất dữ liệu nhập tay (mất ~2 phút vì phải chờ chu kỳ kiểm tra bản mới). |
 

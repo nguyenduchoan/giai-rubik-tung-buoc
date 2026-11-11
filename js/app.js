@@ -99,7 +99,11 @@
     }
   }
 
-  function switchTab(name) {
+  // Tab đang mở trước khi vào Chơi tự do: nút Quay lại của sân chơi trở về đây.
+  let tabBeforePlay = 'scan';
+  // fromUser: gọi trong thao tác bấm/phím của người dùng (trình duyệt chỉ cho mở toàn màn hình trong thao tác đó).
+  function switchTab(name, { fromUser = false } = {}) {
+    if (name === 'play' && activeTab() !== 'play') tabBeforePlay = activeTab();
     document.querySelectorAll('.tab').forEach((t) => {
       const selected = t.dataset.tab === name;
       t.classList.toggle('active', selected);
@@ -118,11 +122,16 @@
     }
     if (name === 'solve') renderSolve();
     window.Rubik.learn.setActive(name === 'learn');
-    window.Rubik.play.setActive(name === 'play');
+    window.Rubik.play.setActive(name === 'play', { requestFullscreen: fromUser });
     updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab, { fromUser: true })));
+  window.Rubik.play.setExitHandler(() => {
+    const target = tabBeforePlay === 'play' ? 'scan' : tabBeforePlay;
+    switchTab(target);
+    return document.getElementById('nav-' + target);
+  });
   document.querySelector('.tabs').addEventListener('keydown', (event) => {
     const tabs = [...document.querySelectorAll('.tab')];
     const current = tabs.indexOf(event.target);
@@ -131,7 +140,7 @@
     const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
       : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
     tabs[index].focus();
-    switchTab(tabs[index].dataset.tab);
+    switchTab(tabs[index].dataset.tab, { fromUser: true });
   });
 
   // ================== 1. CHỤP / QUAY ==================
@@ -1532,7 +1541,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111play1');
+    const w = new Worker('js/solver-worker.js?v=20261111play2');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;

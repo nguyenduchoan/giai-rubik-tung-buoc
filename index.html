@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261111play1">
+  <link rel="stylesheet" href="css/style.css?v=20261111play2">
 </head>
 <body>
   <header class="app-header">
@@ -261,52 +261,72 @@
       </details>
     </section>
     <section id="tab-play" class="panel" role="tabpanel" aria-labelledby="nav-play">
-      <div class="play-layout">
-        <div class="card play-stage">
-          <h2>Xoay Rubik ảo</h2>
-          <p class="muted">Vuốt hàng hoặc cột ngoài để xoay lớp. Kéo ô tâm hoặc vùng trống để đổi góc nhìn; chạm một mặt để chọn mặt đó.</p>
-          <label class="btn toggle"><input id="play-turn-mode" type="checkbox" checked> Vuốt để xoay lớp</label>
-          <div id="play-cube" class="cube3d-container" aria-label="Rubik tương tác: vuốt hàng hoặc cột ngoài để xoay lớp, kéo ô tâm để đổi góc nhìn"></div>
-          <p id="play-status" class="play-status" role="status" aria-live="polite"></p>
-          <div class="row wrap center">
-            <button id="play-undo" class="btn" type="button">↶ Hoàn tác</button>
-            <button id="play-redo" class="btn" type="button" title="Đi lại nước vừa hoàn tác">↷ Làm lại</button>
-          </div>
-          <div class="row wrap center">
-            <button id="play-scramble" class="btn primary" type="button">🎲 Tráo 20 nước</button>
-            <button id="play-reset" class="btn" type="button">Về khối đã giải</button>
-            <button id="play-view" class="btn" type="button">↺ Góc nhìn</button>
-          </div>
-          <p class="muted small">Cách cầm mẫu: vàng ở trên, trắng ở dưới, xanh lá ở trước. Đổi góc quan sát không đổi tên các mặt.</p>
-          <p id="play-storage-note" class="muted small">Khối đang chơi được tự lưu trên trình duyệt để bạn có thể quay lại sau.</p>
+      <div id="play-arena" class="play-arena" tabindex="-1" aria-label="Sân chơi Rubik">
+        <div class="play-toolbar" role="toolbar" aria-label="Điều khiển nhanh của sân chơi">
+          <button id="play-back" class="btn" type="button" aria-label="Quay lại"><span aria-hidden="true">←</span><span class="play-label">Quay lại</span></button>
+          <p id="play-gesture" class="play-gesture" aria-hidden="true">Sẵn sàng</p>
+          <button id="play-undo" class="btn" type="button" aria-label="Hoàn tác"><span aria-hidden="true">↶</span><span class="play-label">Hoàn tác</span></button>
+          <button id="play-redo" class="btn" type="button" aria-label="Làm lại" title="Đi lại nước vừa hoàn tác"><span aria-hidden="true">↷</span><span class="play-label">Làm lại</span></button>
+          <button id="play-view" class="btn" type="button" aria-label="Đặt lại góc nhìn" title="Đưa góc quan sát về mặc định, không đổi khối"><span aria-hidden="true">⟲</span><span class="play-label">Góc nhìn</span></button>
+          <button id="play-fullscreen" class="btn" type="button" aria-label="Toàn màn hình" aria-pressed="false"><span aria-hidden="true">⛶</span><span class="play-label">Toàn màn hình</span></button>
+          <button id="play-panel-toggle" class="btn" type="button" aria-label="Điều khiển" aria-controls="play-panel" aria-expanded="false"><span aria-hidden="true">☰</span><span class="play-label">Điều khiển</span></button>
         </div>
-        <div class="card play-panel">
-          <h3>Chọn mặt cần xoay</h3>
-          <div id="play-faces" class="play-faces" role="group" aria-label="Chọn mặt Rubik"></div>
-          <p id="play-face-name" class="play-face-name"></p>
-          <div class="play-turns" role="group" aria-label="Chiều xoay mặt đang chọn">
-            <button id="play-clockwise" class="btn primary" type="button">↻ 90°</button>
-            <button id="play-counterclockwise" class="btn" type="button">↺ 90°</button>
-            <button id="play-half" class="btn" type="button">180°</button>
-          </div>
-          <p class="muted small">Chiều kim đồng hồ được tính khi nhìn thẳng vào mặt cần xoay.</p>
-          <form id="play-form" class="play-form">
-            <label for="play-sequence">Tập một công thức</label>
-            <input id="play-sequence" type="text" placeholder="R U R' U'" maxlength="200" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="play-form-hint play-error">
-            <p id="play-form-hint" class="muted small">Nhập R, L, U, D, F, B; thêm dấu ' để xoay ngược hoặc số 2 để xoay nửa vòng. Ngăn các nước bằng dấu cách.</p>
-            <div class="row wrap">
-              <button id="play-run" class="btn primary" type="submit">▶ Chạy công thức</button>
-              <button id="play-stop" class="btn" type="button" disabled>⏸ Dừng</button>
+        <div class="play-body">
+          <div class="play-stage">
+            <div id="play-cube" class="cube3d-container" role="group" aria-label="Rubik tương tác: 1 ngón xoay một lớp, 2 ngón xoay hai lớp, 3 ngón đổi góc nhìn. Dùng bảng Điều khiển để xoay bằng nút."></div>
+            <div class="play-stage-top">
+              <p id="play-status" class="play-status" role="status" aria-live="polite"></p>
             </div>
-            <p id="play-error" class="play-error" role="alert"></p>
-          </form>
-          <h3>Các nước vừa đi</h3>
-          <ol id="play-history" class="play-history" aria-label="Lịch sử nước xoay"></ol>
-          <details class="help">
-            <summary>Điều khiển bằng bàn phím</summary>
-            <p>R, L, U, D, F, B: xoay mặt tương ứng. Giữ Shift để xoay ngược. Phím 2 xoay 180° mặt đang chọn.</p>
-            <p>Ctrl/Cmd + Z: hoàn tác. Ctrl/Cmd + Shift + Z hoặc Ctrl + Y: làm lại. Khi đang nhập công thức, các phím chỉ dùng để nhập chữ.</p>
-          </details>
+            <div class="play-stage-bottom">
+              <p class="play-gesture-hint">1 ngón: một lớp · 2 ngón: hai lớp · 3 ngón: nhìn quanh</p>
+              <p id="play-screen-note" class="play-screen-note" role="status"></p>
+            </div>
+          </div>
+          <aside id="play-panel" class="play-panel" aria-label="Bảng điều khiển" hidden>
+            <div class="play-panel-head">
+              <h2>Điều khiển</h2>
+              <button id="play-panel-close" class="btn small" type="button" aria-label="Đóng bảng điều khiển">✕</button>
+            </div>
+            <fieldset class="play-modes">
+              <legend>Kéo chuột và nút xoay</legend>
+              <label><input type="radio" name="play-mode" value="layer1" checked> 1 lớp</label>
+              <label><input type="radio" name="play-mode" value="layer2"> 2 lớp</label>
+              <label><input type="radio" name="play-mode" value="view"> Góc nhìn</label>
+            </fieldset>
+            <p class="muted small">Trên màn hình cảm ứng, số ngón quyết định: 1 ngón xoay một lớp (kể cả lớp giữa), 2 ngón xoay lớp ngoài cùng lớp giữa kề nó, 3 ngón đổi góc nhìn. Một ngón kéo ở vùng nền cũng đổi góc nhìn.</p>
+            <h3>Chọn lớp cần xoay</h3>
+            <div id="play-faces" class="play-faces" role="group" aria-label="Chọn lớp Rubik"></div>
+            <p id="play-face-name" class="play-face-name"></p>
+            <div class="play-turns" role="group" aria-label="Chiều xoay lớp đang chọn">
+              <button id="play-clockwise" class="btn primary" type="button">↻ F</button>
+              <button id="play-counterclockwise" class="btn" type="button">↺ F'</button>
+              <button id="play-half" class="btn" type="button">F2</button>
+            </div>
+            <p class="muted small">Chiều kim đồng hồ tính khi nhìn thẳng vào mặt cần xoay. M xoay theo L, E theo D, S theo F.</p>
+            <div class="row wrap">
+              <button id="play-scramble" class="btn primary" type="button">🎲 Tráo 20 nước</button>
+              <button id="play-reset" class="btn" type="button">Về khối đã giải</button>
+            </div>
+            <form id="play-form" class="play-form">
+              <label for="play-sequence">Tập một công thức</label>
+              <input id="play-sequence" type="text" placeholder="R U R' U' M2 Rw" maxlength="200" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="play-form-hint play-error">
+              <p id="play-form-hint" class="muted small">Nhập R, L, U, D, F, B; lớp giữa M, E, S; hai lớp Rw, Uw… hoặc chữ thường r, u… Thêm dấu ' để xoay ngược hoặc số 2 để xoay nửa vòng. Ngăn các nước bằng dấu cách.</p>
+              <div class="row wrap">
+                <button id="play-run" class="btn primary" type="submit">▶ Chạy công thức</button>
+                <button id="play-stop" class="btn" type="button" disabled>⏸ Dừng</button>
+              </div>
+              <p id="play-error" class="play-error" role="alert"></p>
+            </form>
+            <h3>Các nước vừa đi</h3>
+            <ol id="play-history" class="play-history" aria-label="Lịch sử nước xoay"></ol>
+            <details class="help">
+              <summary>Điều khiển bằng bàn phím</summary>
+              <p>R, L, U, D, F, B, M, E, S: xoay lớp tương ứng. Giữ Shift để xoay ngược. Phím 2 xoay 180° lớp đang chọn.</p>
+              <p>Ctrl/Cmd + Z: hoàn tác. Ctrl/Cmd + Shift + Z hoặc Ctrl + Y: làm lại. Khi đang nhập công thức, các phím chỉ dùng để nhập chữ.</p>
+            </details>
+            <p class="muted small">Cách cầm mẫu: vàng ở trên, trắng ở dưới, xanh lá ở trước. Tên lớp tính theo vị trí; xoay lớp giữa có thể làm màu tâm ở mỗi vị trí thay đổi. Đổi góc nhìn không đổi khối.</p>
+            <p id="play-storage-note" class="muted small">Khối đang chơi được tự lưu trên trình duyệt để bạn có thể quay lại sau.</p>
+          </aside>
         </div>
       </div>
     </section>
@@ -315,14 +335,16 @@
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261111play1"></script>
-  <script src="js/solver.js?v=20261111play1"></script>
-  <script src="js/vision.js?v=20261111play1"></script>
-  <script src="js/cube3d.js?v=20261111play1"></script>
-  <script src="js/lessons.js?v=20261111play1"></script>
-  <script src="js/learn.js?v=20261111play1"></script>
-  <script src="js/play-state.js?v=20261111play1"></script>
-  <script src="js/play.js?v=20261111play1"></script>
-  <script src="js/app.js?v=20261111play1"></script>
+  <script src="js/cube.js?v=20261111play2"></script>
+  <script src="js/play-moves.js?v=20261111play2"></script>
+  <script src="js/play-gesture.js?v=20261111play2"></script>
+  <script src="js/solver.js?v=20261111play2"></script>
+  <script src="js/vision.js?v=20261111play2"></script>
+  <script src="js/cube3d.js?v=20261111play2"></script>
+  <script src="js/lessons.js?v=20261111play2"></script>
+  <script src="js/learn.js?v=20261111play2"></script>
+  <script src="js/play-state.js?v=20261111play2"></script>
+  <script src="js/play.js?v=20261111play2"></script>
+  <script src="js/app.js?v=20261111play2"></script>
 </body>
 </html>

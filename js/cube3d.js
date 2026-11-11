@@ -1,6 +1,7 @@
 /*
  * Hiển thị khối Rubik 3D bằng CSS 3D transform, có animation cho từng bước xoay.
- * Kéo chuột / vuốt để xoay góc nhìn.
+ * Kéo chuột / vuốt để xoay góc nhìn. Khi có options.onTurn (Chơi tự do), dùng Rubik.PlayGesture để nhận 1/2/3 ngón.
+ * Lớp được mô tả chung bằng { axis, layers }: axis 0 = x (R), 1 = y (U), 2 = z (F); layers là toạ độ -1/0/1.
  */
 (function (root) {
   'use strict';
@@ -19,9 +20,10 @@
       this.options = options;
       this.size = options.size || 56;
       this.view = { ...DEFAULT_VIEW };
+      this.scale = 1;
       this.animating = false;
       this.build();
-      if (options.onTurn) this.enableLayerDrag();
+      if (options.onTurn) this.enableGestures();
       else this.enableDrag();
     }
 
@@ -92,15 +94,47 @@
       colors.forEach((c, i) => { this.stickers[i].style.background = c; });
     }
 
-    setHighlight(face) {
+    // Mặt 'U'...'B' (cách gọi cũ) hoặc mô tả { axis, layers } -> mô tả chung; null nếu không có.
+    static layerSpec(target) {
+      if (!target) return null;
+      if (typeof target === 'string') {
+        const n = C.NORMALS[target];
+        if (!n) return null;
+        const axis = n.findIndex((v) => v !== 0);
+        return { axis, layers: [n[axis]] };
+      }
+      return target;
+    }
+
+    markLayers(className, target) {
+      const spec = Cube3D.layerSpec(target);
       this.cubies.forEach((c) => {
-        const on = face && C.NORMALS[face].reduce((a, v, i) => a + v * c.pos[i], 0) === 1;
-        c.el.classList.toggle('active-layer', !!on);
+        c.el.classList.toggle(className, !!spec && spec.layers.includes(c.pos[spec.axis]));
       });
     }
 
+    setHighlight(target) { this.markLayers('active-layer', target); }
+
+    // Tô sáng lớp đang được kéo; ẩn tô sáng lớp đang chọn để không nhầm hai lớp.
+    setPreview(target) {
+      this.markLayers('preview-layer', target);
+      this.container.classList.toggle('gesturing', !!target);
+    }
+
     applyView() {
-      this.root.style.transform = `rotateX(${this.view.rx}deg) rotateY(${this.view.ry}deg)`;
+      this.root.style.transform = `scale3d(${this.scale}, ${this.scale}, ${this.scale}) rotateX(${this.view.rx}deg) rotateY(${this.view.ry}deg)`;
+    }
+
+    // Co giãn khối theo vùng chứa (sân chơi toàn màn hình), chừa khoảng trống quanh khối để đặt thêm ngón.
+    // reserveY: phần chiều cao dành cho chữ hiển thị chồng lên vùng chứa.
+    fit(fraction = 0.56, reserveY = 0) {
+      const rect = this.container.getBoundingClientRect();
+      const room = Math.min(rect.width, rect.height - reserveY);
+      if (!room) return;
+      const scale = Math.max(0.7, Math.min(2.2, (room * fraction) / (this.size * 4.3)));
+      if (Math.abs(scale - this.scale) < 0.005) return;
+      this.scale = scale;
+      this.applyView();
     }
 
     resetView() {
@@ -129,98 +163,142 @@
     // Chiếu điểm của mô hình sang hướng màn hình, cùng thứ tự rotateX * rotateY của CSS.
     projectPoint([x, y, z]) {
       const rx = this.view.rx * Math.PI / 180, ry = this.view.ry * Math.PI / 180;
-      const px = (x * Math.cos(ry) + z * Math.sin(ry)) * this.size;
-      const pz = (-x * Math.sin(ry) + z * Math.cos(ry)) * this.size;
-      const py = -y * this.size;
+      const size = this.size * (this.scale || 1);
+      const px = (x * Math.cos(ry) + z * Math.sin(ry)) * size;
+      const pz = (-x * Math.sin(ry) + z * Math.cos(ry)) * size;
+      const py = -y * size;
       const screenY = py * Math.cos(rx) - pz * Math.sin(rx);
       const depth = py * Math.sin(rx) + pz * Math.cos(rx);
       const perspective = 1100 / (1100 - depth);
       return [px * perspective, screenY * perspective];
     }
 
-    moveForDrag(index, dx, dy) {
+    /*
+     * Chọn lớp theo ô bắt đầu và hướng kéo trên màn hình. Lớp chứa ô đó và vuông góc với mặt của ô; layers = 2 lấy
+     * thêm lớp giữa kề lớp ngoài. Trả về { axis, layer, tx, ty, tokens: [chiều dương, chiều âm], spec },
+     * { error } khi xoay hai lớp từ hàng/cột giữa, hoặc null khi hướng chưa rõ. (tx, ty) là hướng màn hình của chiều dương.
+     */
+    pickLayer(index, dx, dy, layers = 1) {
       const facelet = C.FACELETS[index];
-      if (!facelet || Math.hypot(dx, dy) < 18) return null;
+      const length = Math.hypot(dx, dy);
+      const M = root.Rubik.playMoves;
+      if (!facelet || !length || !M) return null;
       const point = facelet.pos.map((value, axis) => value + 0.5 * facelet.normal[axis]);
       const from = this.projectPoint(point);
-      let best = null, alignment = 0.65;
-      for (const face of C.FACES) {
-        if (face === facelet.face) continue;
-        const normal = C.NORMALS[face];
-        const dot = normal.reduce((sum, value, axis) => sum + value * facelet.pos[axis], 0);
-        if (dot !== 1) continue;
-        const cross = [normal[1] * point[2] - normal[2] * point[1],
-          normal[2] * point[0] - normal[0] * point[2], normal[0] * point[1] - normal[1] * point[0]];
-        const angle = 0.02;
-        const along = normal.reduce((sum, value, axis) => sum + value * point[axis], 0);
-        const rotated = point.map((value, axis) => value * Math.cos(angle) - cross[axis] * Math.sin(angle) +
-          normal[axis] * along * (1 - Math.cos(angle)));
-        const to = this.projectPoint(rotated);
-        const tx = to[0] - from[0], ty = to[1] - from[1];
-        const similarity = (dx * tx + dy * ty) / (Math.hypot(dx, dy) * Math.hypot(tx, ty));
-        if (Math.abs(similarity) > alignment) {
-          alignment = Math.abs(similarity);
-          best = { face, power: similarity > 0 ? 1 : 3 };
+      const own = facelet.normal.findIndex((value) => value !== 0);
+      let best = null, alignment = 0, runnerUp = 0;
+      const n = facelet.normal;
+      for (let axis = 0; axis < 3; axis++) {
+        if (axis === own) continue;
+        // Hướng ô di chuyển trên mặt của nó khi lớp xoay theo chiều kim đồng hồ nhìn từ mặt R/U/F của trục: -(trục × pháp tuyến).
+        // Chỉ lấy phần nằm trong mặt (bỏ phần nhô ra khỏi mặt ở ô sát mép), đúng với cách người dùng vuốt dọc mặt khối.
+        const a = [0, 0, 0];
+        a[axis] = 1;
+        const along = [a[1] * n[2] - a[2] * n[1], a[2] * n[0] - a[0] * n[2], a[0] * n[1] - a[1] * n[0]];
+        const to = this.projectPoint(point.map((value, i) => value - 0.05 * along[i]));
+        const tx = to[0] - from[0], ty = to[1] - from[1], tl = Math.hypot(tx, ty);
+        if (!tl) continue;
+        const similarity = Math.abs((dx * tx + dy * ty) / (length * tl));
+        if (similarity > alignment) {
+          runnerUp = alignment;
+          alignment = similarity;
+          best = { axis, tx: tx / tl, ty: ty / tl };
+        } else {
+          runnerUp = Math.max(runnerUp, similarity);
         }
       }
-      return best;
+      // Cần khớp rõ với một trục; hướng chéo gần đều hai trục là mơ hồ: chưa chọn, chờ kéo rõ hơn.
+      if (!best || alignment <= 0.65 || alignment - runnerUp < 0.1) return null;
+      const layer = facelet.pos[best.axis];
+      const wide = layers === 2;
+      if (wide && layer === 0) {
+        return { error: 'Ngón mốc đang ở hàng/cột giữa. Đặt ngón mốc lên hàng hoặc cột ngoài để xoay hai lớp.' };
+      }
+      return { ...best, layer,
+        tokens: [M.fromLayer(best.axis, layer, 1, wide), M.fromLayer(best.axis, layer, -1, wide)],
+        spec: { axis: best.axis, layers: wide ? [layer, 0] : [layer] } };
     }
 
-    enableLayerDrag() {
+    // Ký hiệu nước xoay cho một lần kéo (dùng trong kiểm thử); null khi quá ngắn/hướng chưa rõ.
+    moveForDrag(index, dx, dy, layers = 1) {
+      if (Math.hypot(dx, dy) < 14) return null;
+      const pick = this.pickLayer(index, dx, dy, layers);
+      if (!pick || pick.error) return pick;
+      return pick.tokens[dx * pick.tx + dy * pick.ty > 0 ? 0 : 1];
+    }
+
+    orbitTo(from, dx, dy) {
+      this.view.ry = from.ry + dx * 0.5;
+      this.view.rx = Math.max(-89, Math.min(89, from.rx - dy * 0.5));
+      this.applyView();
+    }
+
+    enableGestures() {
+      const o = this.options;
       const el = this.container;
-      let gesture = null;
+      let orbitFrom = null;
+      this.gesture = new root.Rubik.PlayGesture({
+        canTurn: () => o.canTurn(),
+        pick: (index, dx, dy, layers) => this.pickLayer(index, dx, dy, layers),
+        preview: (spec) => this.setPreview(spec),
+        orbitStart: () => { orbitFrom = { ...this.view }; },
+        orbit: (dx, dy) => { if (orbitFrom) this.orbitTo(orbitFrom, dx, dy); },
+        orbitCancel: () => {
+          if (orbitFrom) { this.view = { ...orbitFrom }; this.applyView(); }
+          orbitFrom = null;
+        },
+        orbitEnd: () => { orbitFrom = null; },
+        commit: (token) => o.onTurn(token),
+        tap: (index) => o.onSelect(C.FACELETS[index].face),
+        hint: (text) => o.onHint(text),
+        status: (info) => { if (o.onGesture) o.onGesture(info); },
+      }, o.gesture || {});
+      const point = (event) => ({ id: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp,
+        kind: event.pointerType === 'touch' ? 'touch' : 'mouse', primary: event.isPrimary });
       el.addEventListener('pointerdown', (event) => {
-        if (event.isPrimary === false || event.button !== 0 || gesture) return;
+        if (event.pointerType !== 'touch' && event.button !== 0) return;
         const sticker = event.target.closest('[data-facelet]');
-        const index = sticker ? Number(sticker.dataset.facelet) : null;
-        const center = index !== null && index % 9 === 4;
-        gesture = { id: event.pointerId, x: event.clientX, y: event.clientY,
-          rx: this.view.rx, ry: this.view.ry, index,
-          turn: index !== null && !center && this.options.turnMode() && this.options.canTurn() };
-        el.setPointerCapture(event.pointerId);
+        const accepted = this.gesture.down({ ...point(event), facelet: sticker ? Number(sticker.dataset.facelet) : null,
+          mode: o.dragMode ? o.dragMode() : null });
+        if (accepted) {
+          // Giữ quyền nhận sự kiện của từng ngón khi ngón trượt ra ngoài khối.
+          try { el.setPointerCapture(event.pointerId); } catch (error) { /* con trỏ đã nhấc */ }
+        }
         event.preventDefault();
       });
-      el.addEventListener('pointermove', (event) => {
-        if (!gesture || gesture.id !== event.pointerId || gesture.turn) return;
-        this.view.ry = gesture.ry + (event.clientX - gesture.x) * 0.5;
-        this.view.rx = Math.max(-89, Math.min(89, gesture.rx - (event.clientY - gesture.y) * 0.5));
-        this.applyView();
-      });
-      el.addEventListener('pointerup', (event) => {
-        if (!gesture || gesture.id !== event.pointerId) return;
-        const current = gesture;
-        gesture = null;
-        const dx = event.clientX - current.x, dy = event.clientY - current.y;
-        if (Math.hypot(dx, dy) < 8 && current.index !== null) {
-          this.options.onSelect(C.FACELETS[current.index].face);
-        } else if (current.turn && this.options.canTurn()) {
-          const move = this.moveForDrag(current.index, dx, dy);
-          if (move) this.options.onTurn(move);
-          else this.options.onHint('Vuốt dọc hàng hoặc cột ngoài để xoay lớp. Bạn cũng có thể chọn mặt rồi dùng các nút xoay.');
-        }
-      });
-      const cancel = (event) => { if (gesture && gesture.id === event.pointerId) gesture = null; };
-      el.addEventListener('pointercancel', cancel);
-      el.addEventListener('lostpointercapture', cancel);
+      el.addEventListener('pointermove', (event) => this.gesture.move(point(event)));
+      el.addEventListener('pointerup', (event) => this.gesture.up(point(event)));
+      el.addEventListener('pointercancel', (event) => this.gesture.cancel(event.pointerId));
+      el.addEventListener('lostpointercapture', (event) => this.gesture.cancel(event.pointerId));
     }
+
+    cancelGesture(note) { if (this.gesture) this.gesture.abort(note); }
 
     /*
      * Animation một bước xoay. Sau khi xong, gọi onDone để cập nhật màu mới
      * (cùng một khung hình để tránh nhấp nháy).
+     * move: { face, power } (Học chơi/Hướng dẫn giải) hoặc { axis, layers, dir, power } (Chơi tự do, Rubik.playMoves.describe).
      */
     animateMove(move, duration, onDone) {
       if (typeof move === 'string') move = C.parseMove(move);
-      const n = C.NORMALS[move.face];
-      const finalAngle = move.power === 3 ? -90 : 90 * move.power;
+      let spec = move;
+      if (move.axis === undefined) {
+        const n = C.NORMALS[move.face];
+        const axisIndex = n.findIndex((v) => v !== 0);
+        spec = { axis: axisIndex, layers: [n[axisIndex]], dir: n[axisIndex], power: move.power };
+      }
+      const n = [0, 0, 0];
+      n[spec.axis] = spec.dir;
+      const finalAngle = spec.power === 3 ? -90 : 90 * spec.power;
       const layer = [];
       this.cubies.forEach((c) => {
-        if (n[0] * c.pos[0] + n[1] * c.pos[1] + n[2] * c.pos[2] === 1) layer.push(c);
+        if (spec.layers.includes(c.pos[spec.axis])) layer.push(c);
       });
       const axis = `${n[0]}, ${-n[1]}, ${n[2]}`;
       this.animating = true;
       return new Promise((resolve) => {
         const t0 = performance.now();
-        const total = duration * (move.power === 2 ? 1.5 : 1);
+        const total = duration * (spec.power === 2 ? 1.5 : 1);
         const step = (now) => {
           const t = Math.min(1, (now - t0) / total);
           const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;

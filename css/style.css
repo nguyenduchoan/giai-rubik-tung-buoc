@@ -501,19 +501,74 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
   .learn-lesson-controls .btn { font-size: 0.85rem; padding: 10px; }
 }
 
-/* ---------- Rubik tự chơi ---------- */
-.play-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-.play-stage, .play-panel { min-width: 0; line-height: 1.6; }
-.play-panel h3:first-child { margin-top: 0; }
-#play-cube { height: 340px; }
-.play-status { text-align: center; min-height: 3.2em; margin: 0 0 8px; }
+/* ---------- Rubik tự chơi: sân chơi phủ màn hình ---------- */
+html.play-open, html.play-open body { overflow: hidden; overscroll-behavior: none; }
+.play-arena {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; flex-direction: column;
+  height: 100vh; height: 100dvh;
+  background: radial-gradient(circle at top, #1b2540, var(--bg) 60%) var(--bg);
+  color: var(--text);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  outline: none;
+}
+.play-arena::backdrop { background: var(--bg); }
+.play-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 10px; background: #121a2bd9; border-bottom: 1px solid #2a3552;
+}
+.play-toolbar .btn { min-width: 42px; min-height: 42px; padding: 8px 11px; justify-content: center; }
+.play-toolbar .btn[aria-pressed="true"], .play-toolbar .btn[aria-expanded="true"] { border-color: var(--accent); background: #233e6d; }
+.play-gesture {
+  flex: 1 1 140px; min-width: 0; margin: 0; padding: 0 6px;
+  color: #c9d6f2; font-size: 0.88rem; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.play-body { flex: 1; min-height: 0; display: flex; }
+.play-stage { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+#play-cube { position: absolute; inset: 0; height: auto; margin: 0; }
+#play-cube.gesturing .cubie.active-layer .sticker { box-shadow: none; }
+.cubie.preview-layer .sticker { box-shadow: inset 0 0 0 3px #fff, 0 0 10px #9dbbffaa; }
+.play-stage-top, .play-stage-bottom {
+  position: absolute; left: 0; right: 0; padding: 8px 14px; text-align: center;
+  pointer-events: none; text-shadow: 0 1px 3px #000c;
+}
+.play-stage-top { top: 0; }
+.play-stage-bottom { bottom: 0; }
+.play-status { margin: 0 auto; max-width: 640px; line-height: 1.45; }
+.play-gesture-hint { margin: 0; color: #c9d6f2; font-size: 0.88rem; }
+.play-screen-note { margin: 4px auto 0; max-width: 560px; color: #ffcf5c; font-size: 0.82rem; line-height: 1.4; }
+.play-screen-note:empty { display: none; }
+.play-panel {
+  width: min(380px, 42vw); flex: none; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+  user-select: text; -webkit-user-select: text;
+  background: var(--card); border-left: 1px solid #2a3552;
+  padding: 12px 16px calc(18px + var(--play-kb, 0px)); line-height: 1.6;
+}
+.play-panel-head {
+  position: sticky; top: -12px; z-index: 1; margin: -12px -16px 0; padding: 12px 16px 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--card);
+}
+.play-panel-head h2 { margin: 0; font-size: 1.1rem; }
+.play-panel h3 { margin-top: 16px; }
+.play-modes { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; margin: 12px 0 0; }
+.play-modes legend { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; padding: 0; }
+.play-modes label {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding: 8px 12px; border: 1px solid #34416a; border-radius: 10px; background: var(--card-2);
+}
+.play-modes label:has(input:checked) { border-color: var(--accent); background: #233e6d; }
+.play-modes input { accent-color: var(--accent); margin: 0; }
 .play-faces, .play-turns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.play-faces .btn { padding: 10px 6px; justify-content: center; font-size: 0.85rem; }
+.play-faces .btn { padding: 9px 6px; justify-content: center; font-size: 0.85rem; }
 .play-faces .color-chip { margin: 0; flex-shrink: 0; }
+.play-faces .slice-chip { background: transparent; border: 1px dashed #94a0b8; }
 .play-faces [aria-pressed="true"] { border-color: var(--accent); background: #233e6d; }
-.play-turns .btn { justify-content: center; padding: 10px 4px; }
+.play-turns .btn { justify-content: center; padding: 10px 4px; font-family: ui-monospace, monospace; }
 .play-face-name { font-weight: 600; font-size: 0.95rem; }
-.play-form { margin-top: 20px; padding-top: 16px; border-top: 1px solid #34416a; }
+.play-form { margin-top: 18px; padding-top: 14px; border-top: 1px solid #34416a; }
 .play-form > label { display: block; font-weight: 600; margin-bottom: 8px; }
 #play-sequence { width: 100%; min-width: 0; padding: 11px 12px; background: #0f1727; border: 1px solid #34416a; border-radius: 8px; color: var(--text); font: 1rem ui-monospace, monospace; }
 .play-error { color: #ffb1b1; font-size: 0.85rem; overflow-wrap: anywhere; }
@@ -521,9 +576,21 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
 .play-history { display: flex; gap: 6px; flex-wrap: wrap; padding: 0; list-style: none; }
 .play-history code { display: block; padding: 4px 8px; border: 1px solid #34416a; border-radius: 6px; background: var(--card-2); }
 .play-history .current code { border-color: var(--accent); background: #233e6d; }
-#tab-play button:focus-visible, #tab-play input:focus-visible { outline: 3px solid #9dbbff; outline-offset: 3px; }
-@media (max-width: 860px) { .play-layout { grid-template-columns: 1fr; } }
+#tab-play button:focus-visible, #tab-play input:focus-visible, #tab-play summary:focus-visible { outline: 3px solid #9dbbff; outline-offset: 3px; }
+@media (max-width: 760px) {
+  .play-body { flex-direction: column; }
+  .play-panel { width: auto; max-height: 52%; border-left: 0; border-top: 1px solid #2a3552; padding: 10px 14px calc(16px + var(--play-kb, 0px)); }
+  .play-panel-head { top: -10px; margin: -10px -14px 0; padding: 10px 14px 8px; }
+}
+@media (max-height: 500px) {
+  .play-label { display: none; }
+  .play-toolbar { padding: 4px 10px; }
+  .play-stage-top, .play-stage-bottom { padding: 4px 12px; }
+}
 @media (max-width: 560px) {
-  .play-stage, .play-panel { padding: 15px; }
-  #play-cube { height: 280px; }
+  .play-label { display: none; }
+  .play-toolbar { padding: 6px 8px; gap: 5px; justify-content: space-between; }
+  .play-toolbar .btn { min-width: 44px; padding: 8px; font-size: 1.05rem; }
+  .play-gesture { order: 10; flex-basis: 100%; padding: 2px 0 0; }
+  .play-gesture-hint { font-size: 0.8rem; }
 }
