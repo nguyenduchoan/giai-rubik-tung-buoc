@@ -27,6 +27,7 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
    - Chụp trùng một mặt: app chỉ ra hai ảnh bị trùng và mặt còn thiếu, kèm nút chụp lại.
    - Có ô bị nhận sai màu: **chạm vào ô đó để chọn lại màu**. Ô đáng ngờ có dấu `?`. Khi tìm ra 2 ô bị nhận nhầm cho nhau (đỏ↔cam, trắng↔vàng…), app đánh dấu `!` và có nút "Áp dụng gợi ý".
 3. **Hướng dẫn giải**: lời giải khoảng 20 bước (thuật toán hai pha Kociemba), mô phỏng 3D có hoạt ảnh, mô tả từng bước bằng tiếng Việt kèm màu tâm của mặt cần xoay. Bấm **Tiếp** để đi từng bước, hoặc **Tự chạy** để xem hết một lượt.
+4. **Học chơi**: tab riêng, không cần chụp hay nhập màu. Có 15 bài theo 4 mức: làm quen, giải cơ bản 7 bước, kết hợp công thức/F2L (giải đồng thời hai tầng đầu), và nhập môn OLL/PLL (định hướng/hoán vị tầng cuối). Mỗi công thức có điều kiện áp dụng, cách chia cụm để nhớ và khối mẫu 3D riêng để tiến/lùi, tự chạy, đổi tốc độ. Đánh dấu bài đã tự làm được; bài đang học và tiến độ được lưu trên trình duyệt. Khi trình duyệt chặn lưu trữ, vẫn học bình thường trong lần mở hiện tại.
 
 ## Chạy trên máy
 
@@ -73,13 +74,14 @@ Mẹo: chụp nơi đủ sáng, tránh lóa, đặt mặt Rubik vừa khít khun
 
 | Đường dẫn | Vai trò |
 | --- | --- |
-| `index.html`, `css/style.css` | Giao diện 3 bước |
+| `index.html`, `css/style.css` | Giao diện 3 bước giải và tab học chơi |
 | `js/cube.js` | Mô hình sticker, bước xoay, chuyển sang dạng cubie, kiểm tra hợp lệ, tự ghép/xoay ảnh |
 | `js/solver.js` | Bộ giải hai pha Kociemba |
 | `js/solver-worker.js` | Chạy bộ giải trong Web Worker (tự quay về luồng chính nếu bị chặn) |
 | `js/vision.js` | Lấy mẫu màu từ ảnh, phân loại màu, phát hiện chụp trùng, đánh dấu ô đáng ngờ |
 | `js/cube3d.js` | Khối 3D bằng CSS transform + hoạt ảnh xoay |
 | `js/app.js` | Điều khiển giao diện và luồng 3 bước |
+| `js/lessons.js`, `js/learn.js` | Nội dung lộ trình, công thức, mô phỏng học độc lập và lưu tiến độ |
 | `tests/` | Kiểm thử Node và kiểm thử trình duyệt (camera giả) |
 | `test-images/` | 6 ảnh mặt mẫu để thử thủ công |
 | `scripts/` | Máy chủ tĩnh, chạy kiểm thử trình duyệt, script triển khai |
@@ -97,6 +99,8 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | `node tests/vision.test.js` | Nhận màu dưới ánh sáng/nhiễu mô phỏng, phát hiện chụp trùng mặt |
 | `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
+| `node tests/lessons.test.js` | Tác dụng và điều kiện khối mẫu của từng công thức, bảo toàn các phần đã giải, kiểm tra hướng góc và hoán vị cạnh |
+| `node tests/e2e-learn.js` | Tab học: tiến/lùi, tự chạy/dừng, đổi bài/công thức giữa hoạt ảnh, giữ nguyên lời giải thật, lưu tiến độ, lưu trữ bị chặn và bố cục điện thoại |
 | `npm run test:e2e` | Chrome headless + camera giả: tự chụp, sửa màu, giải hết, huỷ lời giải khi dữ liệu đổi, chuyển qua lại giữa camera và ảnh (kể cả ảnh hỏng, quyền camera trả về chậm). Kịch bản `MISTAKES=0` chụp đúng; `1` nhầm thứ tự/hướng; `2` thứ tự và chiều hoàn toàn tuỳ ý; `3` thêm 2 ô đỏ/cam bị nhận nhầm. Chạy riêng một kịch bản: `MISTAKES=2 npm run test:e2e`. |
 | `node tests/e2e-state.js` | Nhập ảnh qua "Chọn ảnh có sẵn": chụp trùng thì chặn giải và huỷ lời giải cũ, giải lại khi hình 3D đang xoay, chụp lại/quay lại bước chụp không mất màu đã sửa, chụp thiếu mặt + tô tay, lời giải xong khi đang ở bước khác, khoá giữ màn hình, tự cập nhật không mất dữ liệu nhập tay (mất ~2 phút vì phải chờ chu kỳ kiểm tra bản mới). |
 

@@ -6,15 +6,16 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261111">
+  <link rel="stylesheet" href="css/style.css?v=20261111learn1">
 </head>
 <body>
   <header class="app-header">
     <h1>🧩 Giải Rubik từng bước</h1>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="scan" role="tab">1. Chụp các mặt</button>
-      <button class="tab" data-tab="edit" role="tab">2. Kiểm tra màu</button>
-      <button class="tab" data-tab="solve" role="tab">3. Hướng dẫn giải</button>
+    <nav class="tabs" role="tablist" aria-label="Chức năng Rubik">
+      <button id="nav-scan" class="tab active" data-tab="scan" role="tab" aria-selected="true" aria-controls="tab-scan">1. Chụp các mặt</button>
+      <button id="nav-edit" class="tab" data-tab="edit" role="tab" aria-selected="false" aria-controls="tab-edit" tabindex="-1">2. Kiểm tra màu</button>
+      <button id="nav-solve" class="tab" data-tab="solve" role="tab" aria-selected="false" aria-controls="tab-solve" tabindex="-1">3. Hướng dẫn giải</button>
+      <button id="nav-learn" class="tab" data-tab="learn" role="tab" aria-selected="false" aria-controls="tab-learn" tabindex="-1">📖 Học chơi</button>
     </nav>
   </header>
 
@@ -25,7 +26,7 @@
 
   <main>
     <!-- ========== 1. CHỤP ========== -->
-    <section id="tab-scan" class="panel active">
+    <section id="tab-scan" class="panel active" role="tabpanel" aria-labelledby="nav-scan">
       <div class="scan-layout">
         <div class="card camera-card">
           <div class="camera-wrap" id="camera-wrap">
@@ -98,7 +99,7 @@
     </section>
 
     <!-- ========== 2. KIỂM TRA ========== -->
-    <section id="tab-edit" class="panel">
+    <section id="tab-edit" class="panel" role="tabpanel" aria-labelledby="nav-edit">
       <div class="card">
         <h2>Kiểm tra &amp; sửa màu</h2>
         <p class="muted"><b>Chạm vào ô bị sai để chọn lại màu</b> (hoặc chọn một màu ở bảng dưới rồi chạm vào các ô cần tô). Ô có dấu <span class="legend-suspect">?</span> là ô app nghi nhận sai màu. Không cần tự xoay mặt: app tự xoay/ghép các ảnh cho khớp (nút ⟳ chỉ để xoay tay nếu muốn).</p>
@@ -125,7 +126,7 @@
     </section>
 
     <!-- ========== 3. GIẢI ========== -->
-    <section id="tab-solve" class="panel">
+    <section id="tab-solve" class="panel" role="tabpanel" aria-labelledby="nav-solve">
       <div class="solve-layout">
         <div class="card player-card">
           <div id="hold-hint" class="hold-hint"></div>
@@ -168,15 +169,107 @@
         </div>
       </div>
     </section>
+    <!-- ========== HỌC CHƠI: LỘ TRÌNH ĐỘC LẬP ========== -->
+    <section id="tab-learn" class="panel" role="tabpanel" aria-labelledby="nav-learn">
+      <div class="card learn-welcome">
+        <div>
+          <p class="learn-eyebrow">TỪ NƯỚC XOAY ĐẦU TIÊN</p>
+          <h2>Tự tay chinh phục Rubik 3×3</h2>
+          <p>Học cách chơi, hiểu từng công thức rồi ghép chúng thành một lần giải. Chuẩn bị một khối Rubik và đi từng bài, không cần chụp hay nhập màu.</p>
+        </div>
+        <div class="learn-progress-box">
+          <label id="learn-progress-text" for="learn-progress"></label>
+          <progress id="learn-progress" value="0" max="15"></progress>
+          <span class="muted small">Đánh dấu bài khi bạn đã tự làm được.</span>
+          <span id="learn-storage-note" class="small" hidden>Trình duyệt không cho lưu; tiến độ chỉ giữ trong lần mở này.</span>
+        </div>
+      </div>
+      <div id="learn-levels" class="learn-levels" role="group" aria-label="Chọn mức độ"></div>
+      <div class="learn-layout">
+        <aside class="card learn-sidebar" aria-label="Danh sách bài học">
+          <h3 id="learn-level-title"></h3>
+          <ol id="learn-lessons" class="learn-lessons"></ol>
+        </aside>
+        <article class="card learn-article" aria-labelledby="learn-title">
+          <p id="learn-position" class="learn-eyebrow"></p>
+          <h2 id="learn-title" tabindex="-1"></h2>
+          <p id="learn-intro"></p>
+          <div class="learn-goal"><strong>Mục tiêu</strong><p id="learn-goal"></p></div>
+          <div id="learn-notation" class="learn-notation" hidden>
+            <dl>
+              <div><dt>R</dt><dd>Phải</dd></div><div><dt>L</dt><dd>Trái</dd></div>
+              <div><dt>U</dt><dd>Trên</dd></div><div><dt>D</dt><dd>Dưới</dd></div>
+              <div><dt>F</dt><dd>Trước</dd></div><div><dt>B</dt><dd>Sau</dd></div>
+            </dl>
+          </div>
+          <ol id="learn-steps" class="learn-steps"></ol>
+          <div class="learn-tip"><strong>Ghi nhớ</strong><p id="learn-tip"></p></div>
+          <div id="learn-roadmap" class="learn-roadmap" hidden></div>
+
+          <section id="learn-practice" class="learn-practice" aria-label="Thực hành công thức" hidden>
+            <h3>Thử công thức trên khối mẫu</h3>
+            <div id="learn-formulas" class="learn-formulas" role="group" aria-label="Chọn công thức"></div>
+            <div class="learn-demo-layout">
+              <div class="learn-formula-info">
+                <h4 id="learn-formula-title"></h4>
+                <p class="muted small">Đọc từ trái sang phải · Các cụm giúp bạn nhớ nhịp</p>
+                <div id="learn-chunks" class="learn-chunks"></div>
+                <h4>Khi nào dùng?</h4>
+                <p id="learn-when"></p>
+                <h4>Kết quả cần hiểu</h4>
+                <p id="learn-result"></p>
+                <p id="learn-example-note" class="muted small"></p>
+              </div>
+              <div class="learn-player">
+                <p class="muted small learn-hold">Khối mẫu: <b>vàng trên, trắng dưới, xanh lá trước</b>. Kéo hình để quan sát các mặt khuất.</p>
+                <div id="learn-cube" class="cube3d-container" aria-label="Khối Rubik mẫu 3D, kéo để đổi góc nhìn"></div>
+                <div id="learn-step-status" class="learn-step-status" role="status" aria-live="polite">
+                  <p id="learn-counter" class="step-counter"></p>
+                  <p id="learn-move" class="step-move"></p>
+                  <p id="learn-description" class="step-desc"></p>
+                </div>
+                <div class="learn-controls">
+                  <button id="learn-reset" class="btn" type="button" aria-label="Về đầu công thức">↺ Về đầu</button>
+                  <button id="learn-prev" class="btn" type="button">◀ Lùi</button>
+                  <button id="learn-next" class="btn primary" type="button">Tiếp ▶</button>
+                  <button id="learn-play" class="btn" type="button">▶ Tự chạy</button>
+                </div>
+                <div class="row wrap">
+                  <label class="learn-speed" for="learn-speed">Tốc độ
+                    <select id="learn-speed"><option value="1000">Chậm</option><option value="600" selected>Vừa</option><option value="250">Nhanh</option></select>
+                  </label>
+                  <button id="learn-view" class="btn small" type="button">↺ Góc nhìn</button>
+                </div>
+              </div>
+            </div>
+            <div id="learn-moves" class="move-list" role="group" aria-label="Các nước của công thức"></div>
+          </section>
+
+          <div class="learn-check"><strong>Tự kiểm tra</strong><p id="learn-check"></p></div>
+          <label class="learn-complete"><input id="learn-complete" type="checkbox"> Tôi đã tự làm được bài này</label>
+          <div class="learn-lesson-controls">
+            <button id="learn-previous-lesson" class="btn" type="button">← Bài trước</button>
+            <button id="learn-next-lesson" class="btn primary" type="button">Bài tiếp theo →</button>
+          </div>
+        </article>
+      </div>
+      <details class="help learn-sources">
+        <summary>Tài liệu tham khảo &amp; học tiếp</summary>
+        <p>Lộ trình cơ bản: <a href="https://ruwix.com/the-rubiks-cube/how-to-solve-the-rubiks-cube-beginners-method/" target="_blank" rel="noopener noreferrer">Ruwix — phương pháp giải từng tầng (tiếng Anh)</a>.</p>
+        <p>Luyện nâng cao: <a href="https://jperm.net/3x3/cfop" target="_blank" rel="noopener noreferrer">J Perm — CFOP (phương pháp giải nhanh, tiếng Anh)</a>, <a href="https://jperm.net/algs/2lookoll" target="_blank" rel="noopener noreferrer">OLL hai bước (định hướng tầng cuối)</a>, <a href="https://jperm.net/algs/2lookpll" target="_blank" rel="noopener noreferrer">PLL hai bước (hoán vị tầng cuối)</a>.</p>
+      </details>
+    </section>
   </main>
 
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261111"></script>
-  <script src="js/solver.js?v=20261111"></script>
-  <script src="js/vision.js?v=20261111"></script>
-  <script src="js/cube3d.js?v=20261111"></script>
-  <script src="js/app.js?v=20261111"></script>
+  <script src="js/cube.js?v=20261111learn1"></script>
+  <script src="js/solver.js?v=20261111learn1"></script>
+  <script src="js/vision.js?v=20261111learn1"></script>
+  <script src="js/cube3d.js?v=20261111learn1"></script>
+  <script src="js/lessons.js?v=20261111learn1"></script>
+  <script src="js/learn.js?v=20261111learn1"></script>
+  <script src="js/app.js?v=20261111learn1"></script>
 </body>
 </html>

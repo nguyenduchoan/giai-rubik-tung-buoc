@@ -67,14 +67,14 @@
   const activeTab = () => document.querySelector('.tab.active').dataset.tab;
 
   /*
-   * Giữ màn hình điện thoại không tắt khi đang quay camera hoặc ở bước giải. Trạng thái mong muốn được tính lại
+   * Giữ màn hình điện thoại không tắt khi đang quay camera, giải hoặc học chơi. Trạng thái mong muốn được tính lại
    * mỗi lần và áp dụng tuần tự (request/release là bất đồng bộ, gọi chồng nhau sẽ mất hoặc rò khoá). Trình duyệt
    * tự nhả khoá khi trang bị ẩn nên phải xin lại khi trang hiện lại.
    */
   let wakeLock = null;
   let wakeSyncing = false;
   const wantAwake = () => document.visibilityState === 'visible' &&
-    (cam.mode === 'camera' || activeTab() === 'solve');
+    (cam.mode === 'camera' || activeTab() === 'solve' || activeTab() === 'learn');
   async function updateWakeLock() {
     if (wakeSyncing || !navigator.wakeLock) return;
     wakeSyncing = true;
@@ -100,7 +100,12 @@
   }
 
   function switchTab(name) {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab').forEach((t) => {
+      const selected = t.dataset.tab === name;
+      t.classList.toggle('active', selected);
+      t.setAttribute('aria-selected', String(selected));
+      t.tabIndex = selected ? 0 : -1;
+    });
     document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + name));
     if (name !== 'scan') stopCamera();
     closePicker();
@@ -112,10 +117,21 @@
       if (cam.wanted) startCamera();
     }
     if (name === 'solve') renderSolve();
+    window.Rubik.learn.setActive(name === 'learn');
     updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  document.querySelector('.tabs').addEventListener('keydown', (event) => {
+    const tabs = [...document.querySelectorAll('.tab')];
+    const current = tabs.indexOf(event.target);
+    if (current < 0 || !['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+      : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[index].focus();
+    switchTab(tabs[index].dataset.tab);
+  });
 
   // ================== 1. CHỤP / QUAY ==================
   const canvas = $('#camera-canvas');
@@ -1515,7 +1531,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111');
+    const w = new Worker('js/solver-worker.js?v=20261111learn1');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;
@@ -1789,8 +1805,8 @@
   $('#btn-reset-view').addEventListener('click', () => view3d.resetView());
 
   document.addEventListener('keydown', (e) => {
-    if (activeTab() !== 'solve' || !state.solution) return;
-    if (e.target.closest('input, textarea')) return;
+    if (e.defaultPrevented || activeTab() !== 'solve' || !state.solution) return;
+    if (e.target.closest('input, textarea, select, .tabs')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); state.playing = false; stepForward(); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); state.playing = false; stepBack(); }
     else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
@@ -1811,7 +1827,7 @@
     } catch (e) { return; }
     if (!latest || latest === APP_VERSION) return;
     // Chỉ tự tải lại khi trang còn nguyên như lúc mở: chưa chụp, chưa tô/sửa màu, chưa giải.
-    const pristine = !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
+    const pristine = activeTab() !== 'learn' && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
       state.colors.every((c, i) => c === INITIAL_COLORS[i]);
     if (pristine) { location.reload(); return; }
     $('#update-banner').hidden = false;

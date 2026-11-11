@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ### Thay đổi & Cải tiến
 
+- **Tab Học chơi riêng**: 15 bài từ cách cầm khối, đọc ký hiệu, giải cơ bản 7 bước đến kết hợp công thức, F2L (hai tầng đầu), OLL (định hướng tầng cuối) và PLL (hoán vị tầng cuối). Có 19 công thức/mẫu với điều kiện áp dụng, chia cụm để ghi nhớ, mô phỏng 3D độc lập, tiến/lùi, tự chạy/dừng, chọn tốc độ và lưu tiến độ học trên trình duyệt. Hỗ trợ màn hình điện thoại và đổi tab bằng bàn phím.
 - **Xác nhận chụp theo màu tâm**: khi bấm xác nhận cho mặt có màu tâm đã lưu trước đó, app tự động **cập nhật ảnh mới nhất vào đúng tâm đó** thay vì tạo thêm ảnh mới và làm mất lượt chụp của các mặt còn lại (ví dụ bấm xác nhận 3 lần liên tiếp trên cùng 1 tâm chỉ cập nhật ảnh cuối cùng của tâm đó).
 - **Khắc phục nhầm màu Đỏ↔Cam và Vàng↔Xanh lá/Xanh dương**:
   - Mở rộng vùng nhận diện Đỏ dưới ánh sáng vàng ấm (`g/r` thấp), Cam ấm (`h` tới 44°), Vàng ánh chanh (`h` tới 84–90° trên speedcube/đèn LED) và Xanh lá ánh lạnh (`h` tới 182°).

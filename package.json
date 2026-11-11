@@ -27,7 +27,7 @@
   },
   "scripts": {
     "start": "node scripts/serve.js",
-    "test": "node tests/solver.test.js && node tests/vision.test.js && node tests/arrange.test.js && node tests/serve.test.js",
+    "test": "node tests/solver.test.js && node tests/vision.test.js && node tests/arrange.test.js && node tests/lessons.test.js && node tests/serve.test.js",
     "test:e2e": "node scripts/run-e2e.js"
   }
 }
