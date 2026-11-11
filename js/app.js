@@ -67,14 +67,14 @@
   const activeTab = () => document.querySelector('.tab.active').dataset.tab;
 
   /*
-   * Giữ màn hình điện thoại không tắt khi đang quay camera, giải hoặc học chơi. Trạng thái mong muốn được tính lại
+   * Giữ màn hình điện thoại không tắt khi đang quay camera, giải, học hoặc tự chơi. Trạng thái mong muốn được tính lại
    * mỗi lần và áp dụng tuần tự (request/release là bất đồng bộ, gọi chồng nhau sẽ mất hoặc rò khoá). Trình duyệt
    * tự nhả khoá khi trang bị ẩn nên phải xin lại khi trang hiện lại.
    */
   let wakeLock = null;
   let wakeSyncing = false;
   const wantAwake = () => document.visibilityState === 'visible' &&
-    (cam.mode === 'camera' || activeTab() === 'solve' || activeTab() === 'learn');
+    (cam.mode === 'camera' || ['solve', 'learn', 'play'].includes(activeTab()));
   async function updateWakeLock() {
     if (wakeSyncing || !navigator.wakeLock) return;
     wakeSyncing = true;
@@ -118,6 +118,7 @@
     }
     if (name === 'solve') renderSolve();
     window.Rubik.learn.setActive(name === 'learn');
+    window.Rubik.play.setActive(name === 'play');
     updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1531,7 +1532,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111learn1');
+    const w = new Worker('js/solver-worker.js?v=20261111play1');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;
@@ -1827,7 +1828,7 @@
     } catch (e) { return; }
     if (!latest || latest === APP_VERSION) return;
     // Chỉ tự tải lại khi trang còn nguyên như lúc mở: chưa chụp, chưa tô/sửa màu, chưa giải.
-    const pristine = activeTab() !== 'learn' && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
+    const pristine = !['learn', 'play'].includes(activeTab()) && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
       state.colors.every((c, i) => c === INITIAL_COLORS[i]);
     if (pristine) { location.reload(); return; }
     $('#update-banner').hidden = false;

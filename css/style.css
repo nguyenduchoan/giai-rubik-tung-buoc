@@ -496,6 +496,34 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
 }
 @media (max-width: 560px) {
   .tabs .tab { flex: 1 1 calc(50% - 6px); padding: 10px 8px; font-size: 0.85rem; }
+  .tabs .tab[data-tab="play"] { flex-basis: 100%; }
   .learn-notation dl { grid-template-columns: repeat(3, 1fr); }
   .learn-lesson-controls .btn { font-size: 0.85rem; padding: 10px; }
+}
+
+/* ---------- Rubik tự chơi ---------- */
+.play-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.play-stage, .play-panel { min-width: 0; line-height: 1.6; }
+.play-panel h3:first-child { margin-top: 0; }
+#play-cube { height: 340px; }
+.play-status { text-align: center; min-height: 3.2em; margin: 0 0 8px; }
+.play-faces, .play-turns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.play-faces .btn { padding: 10px 6px; justify-content: center; font-size: 0.85rem; }
+.play-faces .color-chip { margin: 0; flex-shrink: 0; }
+.play-faces [aria-pressed="true"] { border-color: var(--accent); background: #233e6d; }
+.play-turns .btn { justify-content: center; padding: 10px 4px; }
+.play-face-name { font-weight: 600; font-size: 0.95rem; }
+.play-form { margin-top: 20px; padding-top: 16px; border-top: 1px solid #34416a; }
+.play-form > label { display: block; font-weight: 600; margin-bottom: 8px; }
+#play-sequence { width: 100%; min-width: 0; padding: 11px 12px; background: #0f1727; border: 1px solid #34416a; border-radius: 8px; color: var(--text); font: 1rem ui-monospace, monospace; }
+.play-error { color: #ffb1b1; font-size: 0.85rem; overflow-wrap: anywhere; }
+.play-error:empty { display: none; }
+.play-history { display: flex; gap: 6px; flex-wrap: wrap; padding: 0; list-style: none; }
+.play-history code { display: block; padding: 4px 8px; border: 1px solid #34416a; border-radius: 6px; background: var(--card-2); }
+.play-history .current code { border-color: var(--accent); background: #233e6d; }
+#tab-play button:focus-visible, #tab-play input:focus-visible { outline: 3px solid #9dbbff; outline-offset: 3px; }
+@media (max-width: 860px) { .play-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) {
+  .play-stage, .play-panel { padding: 15px; }
+  #play-cube { height: 280px; }
 }

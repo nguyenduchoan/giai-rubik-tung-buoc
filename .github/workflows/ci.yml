@@ -27,8 +27,8 @@ jobs:
   e2e:
     name: Kiểm thử trình duyệt (camera giả)
     runs-on: ubuntu-latest
-    # 6 bộ × tối đa 4 phút mỗi bộ (E2E_TIMEOUT_MS) + dựng máy: job không bị huỷ trước khi từng bộ tự dừng.
-    timeout-minutes: 30
+    # 7 bộ × tối đa 4 phút mỗi bộ (E2E_TIMEOUT_MS) + dựng máy: job không bị huỷ trước khi từng bộ tự dừng.
+    timeout-minutes: 35
     needs: test
     steps:
       - uses: actions/checkout@v7

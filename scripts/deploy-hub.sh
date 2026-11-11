@@ -17,6 +17,8 @@ echo "==> Chạy test"
 node "$SRC/tests/solver.test.js" >/dev/null
 node "$SRC/tests/vision.test.js" >/dev/null
 node "$SRC/tests/arrange.test.js" >/dev/null
+node "$SRC/tests/lessons.test.js" >/dev/null
+node "$SRC/tests/play.test.js" >/dev/null
 
 echo "==> Chuẩn bị bản mới"
 STAGE="$(mktemp -d "$HUB_ROOT/.rubik-next-XXXXXX")"

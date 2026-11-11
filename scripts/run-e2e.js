@@ -4,6 +4,7 @@
  *   - tests/e2e-camera.js: luồng camera giả cho các kịch bản chụp MISTAKES=0,1,2,3
  *   - tests/e2e-state.js: các ca trạng thái (chụp trùng, hoạt ảnh cũ, sửa tay, tự cập nhật)
  *   - tests/e2e-learn.js: lộ trình học, mô phỏng công thức và lưu tiến độ
+ *   - tests/e2e-play.js: Rubik tự chơi, chuột/cảm ứng, hoàn tác và lưu khối
  *   npm run test:e2e                 # tất cả
  *   MISTAKES=2 npm run test:e2e      # chỉ một (hoặc vài: MISTAKES=1,3) kịch bản camera
  * Cần Google Chrome/Chromium; đặt CHROME_BIN nếu lệnh `google-chrome` không có trên PATH.
@@ -80,6 +81,8 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
     if (!(await run(label, [path.join(TESTS, 'e2e-state.js'), path.join(OUT, 'state')]))) failed.push(label);
     const learnLabel = 'Tab học chơi (e2e-learn)';
     if (!(await run(learnLabel, [path.join(TESTS, 'e2e-learn.js'), path.join(OUT, 'learn')]))) failed.push(learnLabel);
+    const playLabel = 'Rubik tự chơi (e2e-play)';
+    if (!(await run(playLabel, [path.join(TESTS, 'e2e-play.js'), path.join(OUT, 'play')]))) failed.push(playLabel);
   }
   console.log(failed.length ? `\nKHÔNG ĐẠT: ${failed.join('; ')}` : '\nĐẠT tất cả kiểm thử trình duyệt');
   process.exitCode = failed.length ? 1 : 0;
