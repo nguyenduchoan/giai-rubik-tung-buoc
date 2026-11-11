@@ -133,16 +133,39 @@ function check(name, ok, detail) {
     const activeTab = () => evaluate(`document.querySelector('.tab.active').dataset.tab`);
     check('màn hình cảm ứng (pointer: coarse)', await evaluate(`matchMedia('(pointer: coarse)').matches`));
     check('tự bật camera khi mở trang', /Tắt camera/.test(await text('#btn-camera')), await text('#camera-note'));
+    check('mặc định tắt tự chụp để người dùng chủ động xác nhận màu',
+      await evaluate(`!document.querySelector('#auto-capture').checked`));
     await shot('c1-start');
+    let testedPreview = false;
     let shotMid = false;
     for (let i = 0; i < 160; i++) {
       await sleep(250);
       const tab = await evaluate(`document.querySelector('.tab.active').dataset.tab`);
-      const st = await evaluate(`document.querySelector('#auto-status').textContent`);
-      if (!shotMid && /3\/6/.test(st)) { await sleep(1200); await shot('c2-mid'); shotMid = true; }
       if (tab === 'edit') break;
+      const hud = await text('#camera-hud');
+      if (/Đã nhận diện màu/.test(hud)) {
+        if (!testedPreview) {
+          testedPreview = true;
+          await evaluate(`document.querySelector('#btn-capture').click()`);
+          await sleep(150);
+          check('bấm Chụp mặt này => hiện preview xác nhận màu (chưa tự sang mặt kế)',
+            await evaluate(`document.querySelector('#face-preview-box').classList.contains('is-preview') && !document.querySelector('#btn-retake-face').hidden`) &&
+            /0\/6/.test(await text('#auto-status')), await text('#auto-status'));
+          await evaluate(`document.querySelector('#btn-retake-face').click()`);
+          await sleep(150);
+          check('bấm Chụp lại => quay về camera trực tiếp',
+            await evaluate(`!document.querySelector('#face-preview-box').classList.contains('is-preview') && document.querySelector('#btn-retake-face').hidden`));
+          // Chờ nhận diện ổn định lại rồi chụp + xác nhận
+          for (let j = 0; j < 20 && !/Đã nhận diện màu/.test(await text('#camera-hud')); j++) await sleep(150);
+        }
+        await evaluate(`document.querySelector('#btn-capture').click()`);
+        await sleep(100);
+        const st = await text('#auto-status');
+        if (!shotMid && /2\/6/.test(st)) { await shot('c2-mid'); shotMid = true; }
+        await evaluate(`document.querySelector('#btn-confirm-face').click()`);
+      }
     }
-    check('chụp đủ 6 mặt thì sang bước 2', await activeTab() === 'edit');
+    check('chụp và xác nhận đủ 6 mặt thì sang bước 2', await activeTab() === 'edit');
     const truthJson = JSON.stringify(truth);
     const colorsMatch = () => evaluate(`(() => {
       const truth = ${truthJson};

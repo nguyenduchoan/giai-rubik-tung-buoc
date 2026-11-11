@@ -121,6 +121,10 @@
   const ctx = canvas.getContext('2d');
   const frame = document.createElement('canvas');
   const frameCtx = frame.getContext('2d', { willReadFrequently: true });
+  const snapCanvas = document.createElement('canvas');
+  const snapCtx = snapCanvas.getContext('2d');
+  const stableCanvas = document.createElement('canvas');
+  const stableCtx = stableCanvas.getContext('2d');
   const cam = {
     mode: null, // null | 'camera' | 'image'
     video: null,
@@ -128,9 +132,15 @@
     facing: 'environment',
     wanted: false, // người dùng đã bật camera (để tự bật lại khi quay về tab)
     cx: 0.5, cy: 0.5, size: 0.6,
-    live: null,
+    live: null, // 9 mã màu đang hiển thị trực tiếp
+    liveRgb: null, // 9 giá trị [r, g, b] tương ứng với cam.live
+    candColors: null, // bộ đệm chống nhảy màu 1 khung hình (hysteresis)
+    smoothRgb: null, // bộ đệm làm mượt RGB khi giữ yên
+    prevRawRgb: null, // RGB thô của lần lấy mẫu trước để đo độ rung (motion)
+    lastStable: null, // { rgb, colors, time }: mẫu ổn định gần nhất trước khi tay chạm nút
+    lockedSnap: null, // mẫu được chốt ngay ở pointerdown của nút Chụp / Xác nhận
+    preview: null, // { rgb: 9x[r,g,b], colors: 9xId, edited: 9xBool } khi đang xem trước xác nhận màu
     lastSample: 0,
-    prevRgb: null,
     stableSince: 0,
     cooldownUntil: 0,
     hint: '',
@@ -140,6 +150,15 @@
     session: 0,
     pending: 0, // session của lượt bật camera đang chờ (0 = không có)
   };
+
+  function copyCanvas(src, dst, dstCtx) {
+    if (!src.width || !src.height) return;
+    if (dst.width !== src.width || dst.height !== src.height) {
+      dst.width = src.width;
+      dst.height = src.height;
+    }
+    dstCtx.drawImage(src, 0, 0);
+  }
 
   function gridRect() {
     const s = cam.size * Math.min(frame.width, frame.height);
@@ -153,14 +172,16 @@
   function drawOverlay() {
     const { x, y, s } = gridRect();
     const lw = Math.max(2, s / 120);
+    const highlighted = cam.progress > 0 || !!cam.preview;
+    const overlayColors = cam.preview ? cam.preview.colors : cam.live;
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, canvas.height);
     ctx.rect(x, y, s, s);
     ctx.fill('evenodd');
-    ctx.strokeStyle = cam.progress > 0 ? '#2fbf71' : '#ffffff';
-    ctx.lineWidth = lw * (cam.progress > 0 ? 1.6 : 1);
+    ctx.strokeStyle = highlighted ? '#2fbf71' : '#ffffff';
+    ctx.lineWidth = lw * (highlighted ? 1.6 : 1);
     ctx.strokeRect(x, y, s, s);
     ctx.lineWidth = lw / 2;
     ctx.strokeStyle = '#ffffff';
@@ -175,9 +196,9 @@
       ctx.fillStyle = '#2fbf71';
       ctx.fillRect(x, y - lw * 4, s * cam.progress, lw * 3);
     }
-    if (cam.live) {
+    if (overlayColors) {
       const r = s / 18;
-      cam.live.forEach((id, k) => {
+      overlayColors.forEach((id, k) => {
         const cxp = x + ((k % 3) + 0.5) * (s / 3);
         const cyp = y + (Math.floor(k / 3) + 0.5) * (s / 3);
         ctx.beginPath();
@@ -202,58 +223,127 @@
 
   const currentFace = () => SCAN_ORDER[state.scanIndex];
 
-  // Mặt đang ngắm có trùng với một mặt đã chụp khác không (so màu ô tâm)?
-  function duplicateFace(rgb) {
-    return SCAN_ORDER.find((f) => f !== currentFace() && state.scanned[f] && state.rgb[FACE_OFFSET[f] + 4] &&
-      V.colorDistance(rgb[4], state.rgb[FACE_OFFSET[f] + 4]) < AUTO.minCenterDiff);
+  // Mặt đang ngắm/xem trước có trùng với một mặt đã xác nhận khác không (so màu ô tâm)?
+  function duplicateFace(rgb, centerColor = rgb && rgb[4] ? V.classifyHeuristic(rgb[4]) : null, editedCenter = false) {
+    return SCAN_ORDER.find((f) => f !== currentFace() && state.scanned[f] && (
+      (centerColor !== null && centerColor !== undefined && centerOf(f) === centerColor) ||
+      (!editedCenter && rgb && rgb[4] && state.rgb[FACE_OFFSET[f] + 4] &&
+        V.colorDistance(rgb[4], state.rgb[FACE_OFFSET[f] + 4]) < AUTO.minCenterDiff)
+    ));
   }
 
-  function autoCaptureTick(now, detail) {
-    const auto = $('#auto-capture').checked && cam.mode === 'camera';
-    if (!auto) { cam.progress = 0; setHud(''); return; }
+  // Làm mượt RGB theo thời gian khi khối giữ yên và chống nhảy màu 1 khung hình (hysteresis).
+  function updateLiveSample(now, detail) {
+    const uniform = detail.spread.every((sp) => sp <= AUTO.maxSpread);
+    const motion = cam.prevRawRgb
+      ? Math.max(...detail.rgb.map((c, k) => V.colorDistance(c, cam.prevRawRgb[k])))
+      : Infinity;
+    cam.prevRawRgb = detail.rgb;
+
+    if (cam.smoothRgb && uniform && motion <= AUTO.maxMotion) {
+      cam.smoothRgb = detail.rgb.map((rgb, k) =>
+        rgb.map((v, ch) => Math.round(cam.smoothRgb[k][ch] * 0.55 + v * 0.45)));
+    } else {
+      cam.smoothRgb = detail.rgb.map((rgb) => rgb.slice());
+    }
+
+    const rawColors = cam.smoothRgb.map(V.classifyHeuristic);
+    if (!cam.live || !cam.candColors) {
+      cam.live = rawColors.slice();
+      cam.candColors = rawColors.slice();
+    } else {
+      for (let k = 0; k < 9; k++) {
+        if (rawColors[k] === cam.candColors[k] || motion > AUTO.maxMotion * 2.2) {
+          cam.live[k] = rawColors[k];
+        }
+      }
+      cam.candColors = rawColors.slice();
+    }
+    cam.liveRgb = cam.smoothRgb.map((rgb) => rgb.slice());
+    copyCanvas(frame, snapCanvas, snapCtx);
+
+    if (uniform && motion <= AUTO.maxMotion) {
+      cam.lastStable = {
+        rgb: cam.liveRgb.map((rgb) => rgb.slice()),
+        colors: cam.live.slice(),
+        time: now,
+      };
+      copyCanvas(frame, stableCanvas, stableCtx);
+    }
+    return { uniform, motion };
+  }
+
+  // Khi người dùng đưa ngón tay bấm nút Chụp/Xác nhận, điện thoại thường hơi nghiêng trong vài trăm ms cuối.
+  // Ưu tiên lấy mẫu ổn định ngay trước đó để màu chụp được luôn khớp với màu người dùng vừa nhìn thấy.
+  function pickBestLiveSnap(now = performance.now()) {
+    if (cam.lastStable && now - cam.lastStable.time <= 900) {
+      return {
+        rgb: cam.lastStable.rgb.map((c) => c.slice()),
+        colors: cam.lastStable.colors.slice(),
+        canvas: stableCanvas,
+      };
+    }
+    if (cam.live && cam.liveRgb) {
+      return {
+        rgb: cam.liveRgb.map((c) => c.slice()),
+        colors: cam.live.slice(),
+        canvas: snapCanvas,
+      };
+    }
+    const { x, y, s } = gridRect();
+    const rgbs = V.sampleGrid(frameCtx, x, y, s);
+    return {
+      rgb: rgbs,
+      colors: rgbs.map(V.classifyHeuristic),
+      canvas: frame,
+    };
+  }
+
+  function autoCaptureTick(now, detail, { uniform, motion }) {
+    if (cam.preview || cam.mode !== 'camera') { cam.progress = 0; return; }
     if (state.scanned[currentFace()] && !state.reshoot) {
       cam.progress = 0;
-      setHud('Đã chụp đủ. Muốn chụp lại mặt nào thì bấm vào ảnh đó trong danh sách.');
+      setHud('Đã xác nhận đủ 6 mặt. Muốn chụp lại mặt nào thì bấm vào ảnh đó trong danh sách.');
       return;
     }
-    if (now < cam.cooldownUntil) { cam.progress = 0; return; }
-
-    const uniform = detail.spread.every((sp) => sp <= AUTO.maxSpread);
-    const motion = cam.prevRgb
-      ? Math.max(...detail.rgb.map((c, k) => V.colorDistance(c, cam.prevRgb[k])))
-      : Infinity;
-    cam.prevRgb = detail.rgb;
 
     if (!uniform) {
       cam.stableSince = 0; cam.progress = 0;
       setHud('Đưa một mặt chưa chụp vào vừa khít khung 3×3');
       return;
     }
-    // Mặt chỉ một màu dễ nhầm với tường/bàn: chỉ tự chụp khi thấy rõ khe tối giữa các ô.
-    const distinct = new Set(detail.rgb.map(V.classifyHeuristic)).size;
+    // Mặt chỉ một màu dễ nhầm với tường/bàn: chỉ coi là mặt Rubik khi thấy rõ khe tối giữa các ô.
+    const distinct = new Set(cam.live || detail.rgb.map(V.classifyHeuristic)).size;
     if (distinct < 2 && detail.lineRatio > AUTO.maxLineRatio) {
       cam.stableSince = 0; cam.progress = 0;
       setHud('Chưa thấy khối Rubik. Nếu mặt này chỉ có 1 màu, bấm “Chụp mặt này”.');
       return;
     }
-    const dup = duplicateFace(detail.rgb);
+    const dup = duplicateFace(cam.liveRgb || detail.rgb, cam.live && cam.live[4]);
     if (dup) {
       cam.stableSince = 0; cam.progress = 0;
-      setHud(`Mặt tâm ${colorName(centerOf(dup))} đã chụp rồi – hãy xoay sang mặt khác`);
+      setHud(`Mặt tâm ${colorName(centerOf(dup))} đã xác nhận rồi – hãy xoay sang mặt khác`);
       return;
     }
     if (motion > AUTO.maxMotion) {
       cam.stableSince = 0; cam.progress = 0;
-      setHud('Giữ yên khối Rubik…');
+      setHud('Giữ yên khối Rubik để nhận màu chuẩn…');
       return;
     }
+    const auto = $('#auto-capture').checked;
+    if (!auto) {
+      cam.stableSince = 0; cam.progress = 0;
+      setHud('✓ Đã nhận diện màu – bấm Chụp / Xác nhận');
+      return;
+    }
+    if (now < cam.cooldownUntil) { cam.progress = 0; return; }
     if (!cam.stableSince) cam.stableSince = now;
     cam.progress = Math.min(1, (now - cam.stableSince) / AUTO.holdMs);
-    setHud('Giữ yên… sắp chụp');
+    setHud('Giữ yên… sắp chụp để xem trước màu');
     if (cam.progress >= 1) {
       cam.stableSince = 0;
       cam.progress = 0;
-      captureFace(detail.rgb);
+      captureToPreview();
     }
   }
 
@@ -269,7 +359,7 @@
   }
 
   function renderFrame(now) {
-    if (cam.mode === 'camera' && cam.video && cam.video.readyState >= 2) {
+    if (cam.mode === 'camera' && !cam.preview && cam.video && cam.video.readyState >= 2) {
       const w = cam.video.videoWidth, h = cam.video.videoHeight;
       if (frame.width !== w || frame.height !== h) {
         frame.width = w;
@@ -284,13 +374,14 @@
         canvas.height = frame.height;
       }
       ctx.drawImage(frame, 0, 0);
-      if (now - cam.lastSample > AUTO.sampleMs) {
+      if (!cam.preview && now - cam.lastSample > AUTO.sampleMs) {
         cam.lastSample = now;
         const { x, y, s } = gridRect();
         const detail = V.sampleGridDetailed(frameCtx, x, y, s);
-        cam.live = detail.rgb.map(V.classifyHeuristic);
+        const { uniform, motion } = updateLiveSample(now, detail);
         if (!state.scanned[currentFace()] || state.reshoot) renderMiniFace($('#current-preview'), cam.live);
-        autoCaptureTick(now, detail);
+        renderPreviewBox();
+        autoCaptureTick(now, detail, { uniform, motion });
       }
       drawOverlay();
     }
@@ -303,13 +394,27 @@
     if (frame.width && frame.height) wrap.style.aspectRatio = `${frame.width} / ${frame.height}`;
   }
 
+  function resetLiveBuffers() {
+    cam.live = null;
+    cam.liveRgb = null;
+    cam.candColors = null;
+    cam.smoothRgb = null;
+    cam.prevRawRgb = null;
+    cam.lastStable = null;
+    cam.lockedSnap = null;
+    cam.preview = null;
+    cam.stableSince = 0;
+    cam.progress = 0;
+  }
+
   function setMode(mode) {
     cam.mode = mode;
+    if (!mode) resetLiveBuffers();
     $('#camera-placeholder').hidden = !!mode;
-    $('#btn-capture').disabled = !mode;
     $('#btn-camera').textContent = mode === 'camera' ? '⏹ Tắt camera' : '📷 Bật camera';
     $('#btn-flip').hidden = mode !== 'camera';
     if (mode !== 'camera') { setHud(''); cam.progress = 0; }
+    renderPreviewBox();
     updateWakeLock();
   }
 
@@ -358,7 +463,7 @@
       if (stale()) { stream.getTracks().forEach((t) => t.stop()); finish(''); return; }
       cam.stream = stream;
       cam.video = video;
-      cam.prevRgb = null;
+      resetLiveBuffers();
       setMode('camera');
       finish('');
     } catch (err) {
@@ -465,7 +570,10 @@
         frameCtx.drawImage(img, 0, 0, frame.width, frame.height);
         fitCameraBox();
         setMode('image');
-        toast('Kéo khung lưới cho khớp với mặt Rubik rồi bấm "Chụp mặt này".');
+        const { x, y, s } = gridRect();
+        const rgbs = V.sampleGrid(frameCtx, x, y, s);
+        captureToPreview({ rgb: rgbs, colors: rgbs.map(V.classifyHeuristic), canvas: frame }, { flash: false });
+        toast('Kiểm tra màu xem trước (kéo khung lưới nếu lệch) rồi bấm "Xác nhận màu".');
       };
       img.onerror = fail;
       img.src = reader.result;
@@ -481,7 +589,20 @@
     });
   });
 
-  $('#grid-size').addEventListener('input', (e) => { cam.size = e.target.value / 100; });
+  function resamplePreviewGrid() {
+    if (!cam.preview || !frame.width) return;
+    const { x, y, s } = gridRect();
+    const rgbs = V.sampleGrid(frameCtx, x, y, s);
+    cam.preview.rgb = rgbs;
+    cam.preview.colors = rgbs.map((rgb, k) => (cam.preview.edited[k] ? cam.preview.colors[k] : V.classifyHeuristic(rgb)));
+    renderPreviewBox();
+    if (!state.scanned[currentFace()] || state.reshoot) renderMiniFace($('#current-preview'), cam.preview.colors);
+  }
+
+  $('#grid-size').addEventListener('input', (e) => {
+    cam.size = e.target.value / 100;
+    resamplePreviewGrid();
+  });
 
   // Kéo khung lưới.
   (function enableGridDrag() {
@@ -503,6 +624,7 @@
       const p = toFrame(e);
       cam.cx = Math.max(0, Math.min(1, drag.cx + (p.x - drag.p.x) / frame.width));
       cam.cy = Math.max(0, Math.min(1, drag.cy + (p.y - drag.p.y) / frame.height));
+      resamplePreviewGrid();
     });
     const end = () => { drag = null; };
     canvas.addEventListener('pointerup', end);
@@ -518,54 +640,129 @@
     if (navigator.vibrate && activated) navigator.vibrate(60);
   }
 
-  function captureFace(rgbs) {
-    const face = currentFace();
-    if (!rgbs) {
-      const { x, y, s } = gridRect();
-      rgbs = V.sampleGrid(frameCtx, x, y, s);
+  // Dừng khung hình hiện tại và hiển thị bảng xem trước để người dùng kiểm tra/sửa màu trước khi xác nhận.
+  function captureToPreview(snap, { flash = true } = {}) {
+    if (!cam.mode) return;
+    closePicker();
+    if (!snap) snap = cam.lockedSnap || pickBestLiveSnap(performance.now());
+    cam.lockedSnap = null;
+    if (snap.canvas && snap.canvas !== frame && snap.canvas.width > 0) {
+      copyCanvas(snap.canvas, frame, frameCtx);
     }
+    cam.preview = {
+      rgb: snap.rgb.map((c) => c.slice()),
+      colors: snap.colors.slice(),
+      edited: new Array(9).fill(false),
+    };
+    cam.progress = 0;
+    cam.stableSince = 0;
+    setHud('Đang xem trước – bấm Xác nhận màu bên dưới');
+    if (flash) flashFeedback();
+    renderScanGuide();
+  }
+
+  function retakePreview() {
+    closePicker();
+    cam.preview = null;
+    cam.lockedSnap = null;
+    cam.prevRawRgb = null;
+    cam.smoothRgb = null;
+    cam.lastStable = null;
+    cam.stableSince = 0;
+    cam.progress = 0;
+    cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
+    if (cam.mode === 'image') {
+      setMode(null);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } else {
+      setHud('');
+    }
+    renderScanGuide();
+  }
+
+  function confirmCurrentFace() {
+    if (!cam.preview && !cam.mode) return;
+    closePicker();
+    const snap = cam.preview || cam.lockedSnap || pickBestLiveSnap(performance.now());
+    const rgbs = snap.rgb;
+    const colors = snap.colors;
+    const edited = snap.edited || null;
+    const face = currentFace();
     const off = FACE_OFFSET[face];
     rgbs.forEach((rgb, k) => {
-      state.rgb[off + k] = rgb;
-      state.override[off + k] = null; // ảnh mới thay cho các ô đã sửa tay của chính mặt này
-      state.colors[off + k] = V.classifyHeuristic(rgb);
+      state.rgb[off + k] = rgb.slice();
+      state.colors[off + k] = colors[k];
+      state.override[off + k] = edited && edited[k] ? colors[k] : null;
     });
     state.scanned[face] = true;
     state.needsClassify = true;
     state.reshoot = false;
+    cam.preview = null;
+    cam.lockedSnap = null;
     cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
-    cam.prevRgb = null;
+    cam.prevRawRgb = null;
+    cam.smoothRgb = null;
+    cam.lastStable = null;
+    cam.stableSince = 0;
+    cam.progress = 0;
     flashFeedback();
     if (cam.mode === 'image') {
       setMode(null);
-      cam.live = null;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } else {
+      setHud('');
     }
 
     if (SCAN_ORDER.every((f) => state.scanned[f])) {
       const fix = classifyScanned();
       toast(fix.valid
-        ? 'Đã chụp đủ 6 mặt và ghép thành khối hợp lệ! Kiểm tra lại rồi bấm "Giải ngay".'
+        ? 'Đã xác nhận đủ 6 mặt và ghép thành khối hợp lệ! Kiểm tra lại rồi bấm "Giải ngay".'
         : fix.duplicate ? '⚠ Có 2 ảnh chụp trùng một mặt – xem hướng dẫn chụp lại ở bước 2.'
-          : 'Đã chụp đủ 6 mặt. Hãy kiểm tra và sửa các ô bị nhận sai màu.', 5000);
+          : 'Đã xác nhận đủ 6 mặt. Hãy kiểm tra và sửa các ô bị nhận sai màu.', 5000);
       switchTab('edit');
       return;
     }
-    // Chụp tay có thể trùng mặt đã chụp (tự chụp thì đã chặn từ trước).
-    const dup = duplicateFace(rgbs);
+    const dup = duplicateFace(rgbs, colors[4], !!(edited && edited[4]));
     const next = SCAN_ORDER.findIndex((f, i) => i > state.scanIndex && !state.scanned[f]);
     state.scanIndex = next >= 0 ? next : SCAN_ORDER.findIndex((f) => !state.scanned[f]);
     const count = SCAN_ORDER.filter((f) => state.scanned[f]).length;
     if (dup) {
-      toast(`⚠ Mặt vừa chụp có tâm ${colorName(centerOf(face))} giống một mặt đã chụp – có thể bạn chụp trùng. ` +
+      toast(`⚠ Mặt vừa xác nhận có tâm ${colorName(centerOf(face))} giống một mặt đã lưu – có thể bạn chụp trùng. ` +
         'Bấm vào ảnh trong danh sách để chụp lại.', 6000);
     } else {
-      toast(`Đã chụp ${count}/6 mặt. Xoay sang một mặt chưa chụp.`, 2000);
+      toast(`Đã xác nhận ${count}/6 mặt. Xoay sang một mặt chưa chụp.`, 2000);
     }
     renderScanGuide();
   }
 
-  $('#btn-capture').addEventListener('click', () => { if (cam.mode) captureFace(null); });
+  function lockLiveSnapOnPress() {
+    if (cam.mode === 'camera' && !cam.preview) {
+      cam.lockedSnap = pickBestLiveSnap(performance.now());
+    }
+  }
+  $('#btn-capture').addEventListener('pointerdown', lockLiveSnapOnPress);
+  $('#btn-confirm-face').addEventListener('pointerdown', lockLiveSnapOnPress);
+
+  $('#btn-capture').addEventListener('click', () => {
+    if (!cam.mode) return;
+    if (cam.mode === 'image') confirmCurrentFace();
+    else if (!cam.preview) captureToPreview();
+  });
+  $('#btn-confirm-face').addEventListener('click', () => confirmCurrentFace());
+  $('#btn-retake-face').addEventListener('click', () => retakePreview());
+  $('#btn-preview-rotate').addEventListener('click', () => {
+    closePicker();
+    if (cam.preview) {
+      cam.preview.colors = C.rotateFaceArray(cam.preview.colors, 1);
+      cam.preview.rgb = C.rotateFaceArray(cam.preview.rgb, 1);
+      cam.preview.edited = C.rotateFaceArray(cam.preview.edited, 1);
+      renderScanGuide();
+    } else if (state.scanned[currentFace()]) {
+      rotateFace(currentFace());
+      dropStaleSolution();
+      renderScanGuide();
+    }
+  });
 
   // Chỉ cần đủ 6 mặt: thứ tự và chiều cầm tuỳ ý, app tự ghép/xoay lại (C.autoArrange).
   function scanInstruction() {
@@ -591,6 +788,121 @@
 
   const faceColors = (face) => state.colors.slice(FACE_OFFSET[face], FACE_OFFSET[face] + 9);
 
+  function ensurePreviewGridButtons() {
+    const grid = $('#capture-preview-grid');
+    if (grid.children.length === 9) return;
+    grid.innerHTML = '';
+    for (let k = 0; k < 9; k++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.previewCell = String(k);
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (cam.mode === 'camera' && !cam.preview && cam.live) {
+          captureToPreview(null, { flash: false });
+        }
+        if (!cam.preview && !state.scanned[currentFace()]) return;
+        if (pickerPreviewCell === k) closePicker();
+        else openPreviewPicker(k, b);
+      });
+      grid.appendChild(b);
+    }
+  }
+
+  function renderPreviewBox() {
+    ensurePreviewGridButtons();
+    const box = $('#face-preview-box');
+    const title = $('#preview-title');
+    const hint = $('#preview-hint');
+    const btnConfirm = $('#btn-confirm-face');
+    const btnRetake = $('#btn-retake-face');
+    const btnRot = $('#btn-preview-rotate');
+    const btnCap = $('#btn-capture');
+    const face = currentFace();
+    const idx = state.scanIndex + 1;
+
+    let colors = null;
+    let edited = null;
+    let interactive = false;
+
+    if (cam.preview) {
+      colors = cam.preview.colors;
+      edited = cam.preview.edited;
+      interactive = true;
+      box.classList.add('is-preview');
+      const dup = duplicateFace(cam.preview.rgb, colors[4], edited[4]);
+      title.innerHTML = `📋 Xem trước màu vừa chụp · Ảnh ${idx}/6 (tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>)`;
+      hint.innerHTML = dup
+        ? `<span class="warn-text">⚠ Tâm ${colorName(colors[4])} trùng với Ảnh ${SCAN_ORDER.indexOf(dup) + 1} đã lưu – kiểm tra lại hoặc bấm “Chụp lại”.</span>`
+        : 'Kiểm tra 9 ô màu vừa chụp. <b>Chạm vào ô bị sai</b> để chọn lại màu, rồi bấm <b>“Xác nhận màu”</b>.';
+      btnConfirm.disabled = false;
+      btnConfirm.textContent = '✅ Xác nhận màu mặt này';
+      btnRetake.hidden = false;
+      btnRetake.textContent = cam.mode === 'image' ? '🔄 Chọn ảnh khác' : '🔄 Chụp lại';
+      btnRot.disabled = false;
+      btnCap.disabled = cam.mode !== 'image';
+      btnCap.textContent = cam.mode === 'image' ? '✅ Xác nhận mặt này' : '📸 Đã chụp (chờ xác nhận)';
+    } else if (cam.mode === 'camera') {
+      colors = cam.live;
+      interactive = !!cam.live;
+      box.classList.remove('is-preview');
+      if (cam.live) {
+        const dup = duplicateFace(cam.liveRgb, colors[4]);
+        title.innerHTML = `Đang nhận diện Ảnh ${idx}/6 · tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>`;
+        hint.innerHTML = dup
+          ? `<span class="warn-text">⚠ Mặt tâm ${colorName(colors[4])} đã lưu ở Ảnh ${SCAN_ORDER.indexOf(dup) + 1} – hãy xoay sang mặt khác.</span>`
+          : 'Khi nhận diện đúng màu, bấm <b>“Chụp mặt này”</b> để dừng hình kiểm tra, hoặc <b>“Xác nhận màu”</b> để lưu ngay.';
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = '✅ Xác nhận màu';
+      } else {
+        title.innerHTML = `Đang chờ nhận diện Ảnh ${idx}/6…`;
+        hint.innerHTML = 'Đặt mặt Rubik vào vừa khít khung 3×3 trên camera.';
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = '✅ Xác nhận màu';
+      }
+      btnRetake.hidden = true;
+      btnRot.disabled = true;
+      btnCap.disabled = false;
+      btnCap.textContent = '📸 Chụp mặt này';
+    } else {
+      box.classList.remove('is-preview');
+      if (state.scanned[face]) {
+        const off = FACE_OFFSET[face];
+        colors = faceColors(face);
+        edited = state.override.slice(off, off + 9).map((v) => v !== null);
+        interactive = true;
+        title.innerHTML = `✓ Đã xác nhận Ảnh ${idx}/6 · tâm ${chip(colors[4])}<b>${colorName(colors[4])}</b>`;
+        hint.innerHTML = 'Chạm vào ô bên trái để sửa màu, hoặc bật camera / chọn ảnh bên dưới nếu muốn chụp lại.';
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = '✓ Đã xác nhận';
+        btnRot.disabled = false;
+      } else {
+        title.innerHTML = `Ảnh ${idx}/6 · Chưa chụp`;
+        hint.innerHTML = 'Bật camera hoặc chọn ảnh bên dưới để chụp và xác nhận màu cho mặt này.';
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = '✅ Xác nhận màu';
+        btnRot.disabled = true;
+      }
+      btnRetake.hidden = true;
+      btnCap.disabled = true;
+      btnCap.textContent = '📸 Chụp mặt này';
+    }
+
+    const buttons = $('#capture-preview-grid').children;
+    for (let k = 0; k < 9; k++) {
+      const b = buttons[k];
+      const cid = colors ? colors[k] : null;
+      b.style.background = hex(cid);
+      b.disabled = !interactive;
+      b.title = interactive
+        ? `Hàng ${Math.floor(k / 3) + 1} cột ${(k % 3) + 1}: ${colorName(cid)} (chạm để đổi màu)`
+        : '';
+      b.classList.toggle('center', k === 4);
+      b.classList.toggle('edited', !!(edited && edited[k]));
+      b.classList.toggle('picking', pickerPreviewCell === k);
+    }
+  }
+
   function renderScanGuide() {
     const face = currentFace();
     const count = SCAN_ORDER.filter((f) => state.scanned[f]).length;
@@ -599,8 +911,13 @@
     $('#edge-bottom').hidden = true;
     $('#scan-instruction').innerHTML = scanInstruction();
     $('#scan-instruction-inline').innerHTML = scanInstruction();
-    $('#auto-status').innerHTML = `Đang chụp: <b>ảnh ${state.scanIndex + 1}</b> · đã có ${count}/6 mặt`;
-    renderMiniFace($('#current-preview'), state.scanned[face] ? faceColors(face) : cam.live);
+    $('#auto-status').innerHTML = cam.preview
+      ? `Xem trước: <b>ảnh ${state.scanIndex + 1}</b> · chờ xác nhận màu (đã có ${count}/6 mặt)`
+      : `Đang chụp: <b>ảnh ${state.scanIndex + 1}</b> · đã có ${count}/6 mặt`;
+    const previewColors = cam.preview ? cam.preview.colors
+      : (state.scanned[face] && !state.reshoot ? faceColors(face) : cam.live || (state.scanned[face] ? faceColors(face) : null));
+    renderMiniFace($('#current-preview'), previewColors);
+    renderPreviewBox();
 
     const list = $('#face-list');
     list.innerHTML = '';
@@ -615,11 +932,13 @@
       li.appendChild(name);
       const st = document.createElement('span');
       st.className = 'status';
-      st.textContent = state.scanned[f] ? 'Đã chụp ✓ (chụp lại)' : 'Chưa chụp';
+      st.textContent = state.scanned[f] ? 'Đã xác nhận ✓ (chụp lại)' : 'Chưa chụp';
       li.appendChild(st);
       li.addEventListener('click', () => {
+        closePicker();
+        if (cam.preview && cam.mode === 'camera') cam.preview = null;
         state.scanIndex = i;
-        state.reshoot = !!state.scanned[f]; // cho tự chụp lại mặt đã chụp
+        state.reshoot = !!state.scanned[f]; // cho chụp lại mặt đã có
         cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
         renderScanGuide();
       });
@@ -636,16 +955,17 @@
   /*
    * Đủ 6 ảnh: kiểm tra chụp trùng mặt trên MÀU ẢNH GỐC trước, vì classifyAll luôn ép 6 tâm thành 6 màu
    * khác nhau (mặt trùng sẽ thành "màu còn thiếu" và có thể ra khối hợp lệ giả). Rồi mới phân loại + ghép.
-   * Khi trùng: giữ state.duplicate để chặn giải tới khi chụp lại, hoặc người dùng xác nhận hai ảnh là
-   * hai mặt khác nhau (ignoreDuplicate) – ví dụ mặt đỏ và mặt cam đều một màu, trông giống nhau dưới đèn.
+   * Nếu màu người dùng đã xem và xác nhận ở từng mặt đã tạo thành khối hợp lệ, giữ nguyên 100% để không
+   * bao giờ bị nhảy màu sau khi chụp xong.
    */
   function classifyScanned({ ignoreDuplicate = false } = {}) {
     if (!state.rgb.every(Boolean)) return { valid: false, changed: 0 }; // chưa đủ dữ liệu ảnh cả 6 mặt
     state.needsClassify = false;
-    const dup = ignoreDuplicate ? null : V.duplicateCenters(state.rgb, { centerMax: AUTO.minCenterDiff });
     const withOverrides = (colors) => colors.map((c, i) => (state.override[i] ?? c));
-    if (dup) {
-      state.colors = withOverrides(state.rgb.map(V.classifyHeuristic));
+    const confirmed = withOverrides(state.colors);
+    const dup = ignoreDuplicate ? null : V.duplicateCenters(state.rgb, { centerMax: AUTO.minCenterDiff });
+    if (dup && state.override[dup[0] * 9 + 4] === null && state.override[dup[1] * 9 + 4] === null) {
+      state.colors = confirmed;
       state.suggestion = null;
       state.fixedFaces = new Set();
       state.duplicate = { faces: dup, color: state.colors[dup[0] * 9 + 4] };
@@ -653,7 +973,15 @@
       return { valid: false, changed: 0, duplicate: true };
     }
     state.duplicate = null;
-    state.colors = withOverrides(V.classifyAll(state.rgb));
+    const confirmedValid = C.validateColors(confirmed).ok || C.autoArrange(confirmed).ok;
+    if (confirmedValid) {
+      state.colors = confirmed;
+      return autoFix();
+    }
+    const allClassified = withOverrides(V.classifyAll(state.rgb));
+    const allValid = C.validateColors(allClassified).ok || C.autoArrange(allClassified).ok ||
+      !!C.findSwapFix(allClassified, V.suspectCells(state.rgb, allClassified));
+    state.colors = allValid ? allClassified : confirmed;
     return autoFix();
   }
 
@@ -829,9 +1157,25 @@
   // ---------- Bảng chọn màu khi chạm vào một ô ----------
   const picker = $('#color-picker');
   let pickerIdx = null;
+  let pickerPreviewCell = null;
+
+  function positionPicker(anchor) {
+    picker.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    const pw = picker.offsetWidth, ph = picker.offsetHeight;
+    const left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left + r.width / 2 - pw / 2));
+    let top = r.bottom + 8;
+    if (top + ph > window.innerHeight - 8) top = r.top - ph - 8;
+    picker.style.left = `${left}px`;
+    picker.style.top = `${Math.max(8, top)}px`;
+    document.querySelectorAll('#net .grid button.picking, #capture-preview-grid button.picking')
+      .forEach((b) => b.classList.remove('picking'));
+    anchor.classList.add('picking');
+  }
 
   function openPicker(idx, anchor) {
     pickerIdx = idx;
+    pickerPreviewCell = null;
     const sug = state.suggestion;
     const hint = sug && (sug.a === idx || sug.b === idx) ? (sug.a === idx ? sug.colorA : sug.colorB) : null;
     picker.innerHTML =
@@ -841,23 +1185,32 @@
         `${hint === p.id ? ' hint' : ''}"><i style="background:${p.hex}"></i>${p.name}` +
         `${state.colors[idx] === p.id ? ' ✓' : ''}${hint === p.id ? ' (gợi ý)' : ''}</button>`).join('') +
       '</div><button type="button" class="btn small picker-cancel" data-cancel>Huỷ</button>';
-    picker.hidden = false;
-    const r = anchor.getBoundingClientRect();
-    const pw = picker.offsetWidth, ph = picker.offsetHeight;
-    const left = Math.max(8, Math.min(window.innerWidth - pw - 8, r.left + r.width / 2 - pw / 2));
-    let top = r.bottom + 8;
-    if (top + ph > window.innerHeight - 8) top = r.top - ph - 8;
-    picker.style.left = `${left}px`;
-    picker.style.top = `${Math.max(8, top)}px`;
-    document.querySelectorAll('#net .grid button.picking').forEach((b) => b.classList.remove('picking'));
-    anchor.classList.add('picking');
+    positionPicker(anchor);
+  }
+
+  function openPreviewPicker(k, anchor) {
+    pickerIdx = null;
+    pickerPreviewCell = k;
+    const face = currentFace();
+    const curColor = cam.preview ? cam.preview.colors[k] : state.colors[FACE_OFFSET[face] + k];
+    const row = Math.floor(k / 3) + 1, col = (k % 3) + 1;
+    picker.innerHTML =
+      `<div class="picker-title">Ảnh ${state.scanIndex + 1}/6 · hàng ${row} cột ${col}` +
+      '<br><span class="muted small">Chọn màu đúng của ô này</span></div>' +
+      '<div class="picker-grid">' + PAL.map((p) =>
+        `<button type="button" data-color="${p.id}" class="${curColor === p.id ? 'current' : ''}">` +
+        `<i style="background:${p.hex}"></i>${p.name}${curColor === p.id ? ' ✓' : ''}</button>`).join('') +
+      '</div><button type="button" class="btn small picker-cancel" data-cancel>Huỷ</button>';
+    positionPicker(anchor);
   }
 
   function closePicker() {
     const el = document.getElementById('color-picker');
     if (el) el.hidden = true;
     pickerIdx = null;
-    document.querySelectorAll('#net .grid button.picking').forEach((b) => b.classList.remove('picking'));
+    pickerPreviewCell = null;
+    document.querySelectorAll('#net .grid button.picking, #capture-preview-grid button.picking')
+      .forEach((b) => b.classList.remove('picking'));
   }
 
   picker.addEventListener('click', (e) => {
@@ -868,11 +1221,29 @@
       setCellColor(idx, Number(btn.dataset.color));
       return;
     }
+    if (btn && pickerPreviewCell !== null) {
+      const k = pickerPreviewCell;
+      const color = Number(btn.dataset.color);
+      closePicker();
+      if (cam.preview) {
+        cam.preview.colors[k] = color;
+        cam.preview.edited[k] = true;
+      } else if (state.scanned[currentFace()]) {
+        const idx = FACE_OFFSET[currentFace()] + k;
+        state.colors[idx] = color;
+        state.override[idx] = color;
+        state.needsClassify = true;
+        dropStaleSolution();
+      }
+      renderScanGuide();
+      return;
+    }
     if (e.target.closest('[data-cancel]')) closePicker();
   });
   document.addEventListener('pointerdown', (e) => {
     if (picker.hidden) return;
-    if (e.target.closest('#color-picker') || e.target.closest('#net .grid button')) return;
+    if (e.target.closest('#color-picker') || e.target.closest('#net .grid button') ||
+        e.target.closest('#capture-preview-grid button')) return;
     closePicker();
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePicker(); });
@@ -1075,7 +1446,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261106');
+    const w = new Worker('js/solver-worker.js?v=20261111');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;

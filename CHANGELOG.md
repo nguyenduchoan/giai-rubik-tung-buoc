@@ -4,6 +4,14 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ## Chưa phát hành
 
+### Thay đổi & Cải tiến
+
+- **Chụp và xác nhận màu từng mặt (Bước 1)**:
+  - Thêm khung **Xem trước & xác nhận màu** (`#face-preview-box`) ngay dưới khung camera: hiển thị trực tiếp 9 ô màu đang nhận diện, cho phép bấm **✅ Xác nhận màu** ngay khi thấy màu đã đúng, hoặc bấm **📸 Chụp mặt này** để dừng hình, kiểm tra preview 9 ô màu (có thể chạm trực tiếp vào ô bất kỳ trên preview để đổi màu hoặc xoay 90°) rồi chọn **✅ Xác nhận màu mặt này** hoặc **🔄 Chụp lại**.
+  - Tắt mặc định chế độ **🎥 Tự chụp khi giữ yên** để app không tự ý chụp và nhảy mặt liên tục khi người dùng chưa xác nhận; khi bật tùy chọn này, giữ yên 1 giây sẽ dừng hình vào chế độ xem trước chờ người dùng xác nhận.
+  - **Chống nhảy màu khi bấm chụp**: làm mượt RGB theo thời gian khi giữ yên, lọc nhiễu 1 khung hình (hysteresis 2 mẫu liên tiếp) và chốt mẫu ổn định (`lastStable`) ngay trước khi ngón tay chạm nút làm rung điện thoại (không lấy mẫu lại khung hình bị rung lúc `click`).
+  - Giữ nguyên 100% các màu người dùng đã xem và xác nhận ở từng mặt nếu chúng đã ghép được thành khối hợp lệ, tránh việc phân loại toàn cục (`classifyAll`) làm nhảy màu sau khi chụp mặt thứ 6.
+
 ### Sửa lỗi
 
 - Có ảnh chụp trùng chưa xử lý thì huỷ lời giải cũ, kể cả khi màu các ô không đổi.

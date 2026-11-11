@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261106">
+  <link rel="stylesheet" href="css/style.css?v=20261111">
 </head>
 <body>
   <header class="app-header">
@@ -39,11 +39,25 @@
             </div>
           </div>
           <p id="auto-status" class="auto-status"></p>
+          <div id="face-preview-box" class="face-preview-box">
+            <div class="preview-left">
+              <div id="capture-preview-grid" class="preview-face" role="group" aria-label="Xem trước 9 ô màu của mặt đang chụp"></div>
+              <button id="btn-preview-rotate" class="btn small preview-rot" type="button" title="Xoay mặt này 90° theo chiều kim đồng hồ" disabled>⟳ Xoay 90°</button>
+            </div>
+            <div class="preview-right">
+              <div id="preview-title" class="preview-title"></div>
+              <p id="preview-hint" class="preview-hint muted small"></p>
+              <div class="row wrap preview-actions">
+                <button id="btn-confirm-face" class="btn ok" type="button" disabled>✅ Xác nhận màu</button>
+                <button id="btn-retake-face" class="btn" type="button" hidden>🔄 Chụp lại</button>
+              </div>
+            </div>
+          </div>
           <p id="scan-instruction-inline" class="instruction inline-instruction"></p>
           <div class="row wrap">
-            <button id="btn-capture" class="btn primary" disabled>✅ Chụp mặt này</button>
-            <label class="btn toggle" title="Khi khối được giữ yên trong khung khoảng 1 giây, app tự chụp">
-              <input id="auto-capture" type="checkbox" checked> 🎥 Tự chụp khi giữ yên
+            <button id="btn-capture" class="btn primary" disabled>📸 Chụp mặt này</button>
+            <label class="btn toggle" title="Khi bật, giữ yên khối Rubik khoảng 1 giây để tự dừng hình và xem trước màu trước khi xác nhận">
+              <input id="auto-capture" type="checkbox"> 🎥 Tự chụp khi giữ yên
             </label>
             <button id="btn-camera" class="btn">📷 Bật camera</button>
             <button id="btn-flip" class="btn" hidden title="Đổi camera trước/sau">🔄 Đổi camera</button>
@@ -159,10 +173,10 @@
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261106"></script>
-  <script src="js/solver.js?v=20261106"></script>
-  <script src="js/vision.js?v=20261106"></script>
-  <script src="js/cube3d.js?v=20261106"></script>
-  <script src="js/app.js?v=20261106"></script>
+  <script src="js/cube.js?v=20261111"></script>
+  <script src="js/solver.js?v=20261111"></script>
+  <script src="js/vision.js?v=20261111"></script>
+  <script src="js/cube3d.js?v=20261111"></script>
+  <script src="js/app.js?v=20261111"></script>
 </body>
 </html>
