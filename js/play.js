@@ -1,6 +1,7 @@
 /*
- * Sân chơi Rubik tự chơi phủ màn hình: cử chỉ 1/2/3 ngón, nút, bàn phím và công thức; mỗi nước được chốt sau khi
- * hoạt ảnh kết thúc. Toàn màn hình chỉ được yêu cầu trong thao tác của người dùng; bị từ chối thì vẫn phủ kín trang.
+ * Sân chơi Rubik tự chơi phủ màn hình: cử chỉ 1/2/3 ngón, nút, bàn phím và công thức; mỗi lượt (1 nước, hoặc 2 nước
+ * trên hai lớp song song khi kéo hai ngón) được chốt sau khi hoạt ảnh kết thúc.
+ * Toàn màn hình chỉ được yêu cầu trong thao tác của người dùng; bị từ chối thì vẫn phủ kín trang.
  */
 (function () {
   'use strict';
@@ -44,7 +45,7 @@
     dragMode: mode,
     canTurn: () => active && !busy(),
     onSelect: (face) => { selected = face; notice = ''; render(); },
-    onTurn: (token) => { void manual(token); },
+    onTurn: (tokens) => { void manual(tokens); },
     onHint: (hint) => { notice = hint; render(); },
     onGesture: (info) => {
       const chip = $('#play-gesture');
@@ -237,10 +238,10 @@
       empty.textContent = 'Chưa có nước xoay.';
       history.appendChild(empty);
     }
-    model.past.slice(-30).forEach((token, index, items) => {
+    model.past.slice(-30).forEach((entry, index, items) => { // mỗi dòng một lượt; lượt hai ngón hiện hai nước, ví dụ R L'
       const item = document.createElement('li');
       const code = document.createElement('code');
-      code.textContent = token;
+      code.textContent = entry;
       if (index === items.length - 1) item.className = 'current';
       item.appendChild(code);
       history.appendChild(item);
@@ -248,18 +249,19 @@
   }
 
   // ---------- Nước xoay ----------
-  async function perform(action, token) {
+  // entry: một ký hiệu, hoặc lượt hai ngón (mảng/chuỗi hai nước trên hai lớp song song); các lớp chuyển động cùng lúc.
+  async function perform(action, entry) {
     if (!active || view.animating) return;
-    if (action === 'undo') token = model.past.at(-1);
-    if (action === 'redo') token = model.future.at(-1);
-    if (!token) return;
-    const move = action === 'undo' ? P.inverse(token) : P.parse(token);
-    selected = move.base.replace('w', '');
+    if (action === 'undo') entry = model.past.at(-1);
+    if (action === 'redo') entry = model.future.at(-1);
+    if (!entry || (Array.isArray(entry) && !entry.length)) return;
+    const moves = action === 'undo' ? P.inverseEntry(entry) : P.parseEntry(entry);
+    selected = moves[0].base.replace('w', '');
     notice = '';
     $('#play-error').textContent = '';
     const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 240;
-    const pending = view.animateMove(P.describe(move), duration, () => {
-      if (action === 'move') model.move(token);
+    const pending = view.animateMove(moves.map(P.describe), duration, () => {
+      if (action === 'move') model.move(moves);
       else model[action]();
       save();
       view.setColors(model.colors.map(hex));
@@ -269,9 +271,9 @@
     render();
   }
 
-  async function manual(token, action = 'move') {
+  async function manual(entry, action = 'move') {
     if (busy()) return;
-    await perform(action, token);
+    await perform(action, entry);
   }
 
   function stop() {

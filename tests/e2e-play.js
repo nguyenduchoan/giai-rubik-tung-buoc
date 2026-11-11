@@ -1,4 +1,5 @@
 // Sân chơi Rubik tự chơi: toàn màn hình, chuột, chạm 1/2/3/4 ngón thật qua giao thức của Chrome, nút, bàn phím, lưu khối.
+// Hai ngón: mỗi ngón kéo một hàng/cột song song theo chiều riêng; chỉ 3 ngón đổi góc nhìn; tô sáng viên đang chạm.
 'use strict';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -102,14 +103,43 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     // Chạm nhiều ngón: đặt lần lượt từng ngón, giữ, kéo cùng lúc, rồi nhấc riêng từng ngón (touchEnd với điểm cần nhấc).
     const finger = (id, p) => ({ x: p.x, y: p.y, id, radiusX: 2, radiusY: 2, force: 1 });
     const touch = (type, points) => send('Input.dispatchTouchEvent', { type, touchPoints: points });
-    const multiDrag = async (starts, moves, { hold = 220, steps = 4, onMoved } = {}) => {
+    const multiDrag = async (starts, moves, { hold = 220, steps = 4, onPlaced, onMoved } = {}) => {
       const vectors = Array.isArray(moves[0]) ? moves : starts.map(() => moves);
       for (let i = 0; i < starts.length; i++) await touch('touchStart', starts.slice(0, i + 1).map((p, j) => finger(j + 1, p)));
       if (hold) await sleep(hold);
+      if (onPlaced) await onPlaced();
       const at = (j, s) => ({ x: starts[j].x + vectors[j][0] * s / steps, y: starts[j].y + vectors[j][1] * s / steps });
       for (let s = 1; s <= steps; s++) await touch('touchMove', starts.map((_, j) => finger(j + 1, at(j, s))));
       if (onMoved) await onMoved();
       for (let j = 0; j < starts.length; j++) await touch('touchEnd', [finger(j + 1, at(j, steps))]);
+    };
+
+    const count = (selector) => evaluate(`document.querySelectorAll(${JSON.stringify(selector)}).length`);
+    // Sau khi xoay: tâm mọi ô đang nhìn thấy trong ảnh chụp phải là màu ô, không phải nền tối #111 của mặt viên.
+    const noDarkCells = async (label) => {
+      await sleep(150); // chờ hết hoạt ảnh và khung hình dựng lại
+      const shot = (await send('Page.captureScreenshot', { format: 'png' })).result.data;
+      const result = await evaluate(`(async () => {
+        const img = new Image();
+        img.src = 'data:image/png;base64,${shot}';
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const scale = img.width / innerWidth;
+        const centre = (el) => { const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; };
+        const visible = [...document.querySelectorAll('#play-cube [data-facelet]')].filter((el) => document.elementFromPoint(...centre(el)) === el);
+        const dark = visible.filter((el) => {
+          const [x, y] = centre(el);
+          const pixel = ctx.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data;
+          return Math.max(pixel[0], pixel[1], pixel[2]) < 48;
+        }).map((el) => el.dataset.facelet);
+        return { visible: visible.length, dark };
+      })()`);
+      assert(result.visible >= 20, `${label}: nhìn thấy quá ít ô (${result.visible})`);
+      assert.deepEqual(result.dark, [], `${label}: có ô bị tối`);
+      console.log(`✓ ${label}: ${result.visible} ô nhìn thấy, không ô nào bị tối`);
     };
 
     // ---------- Toàn màn hình, máy tính ----------
@@ -257,7 +287,7 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     const legacy = { colors: C.applyMoves(SOLVED, "R U R' U'"), past: ['R', 'U', "R'", "U'"], future: ['F'] };
     await evaluate(`localStorage.removeItem('rubik-play-v2'); localStorage.setItem('rubik-play-v1', ${JSON.stringify(JSON.stringify(legacy))})`);
     await open();
-    assert.deepEqual(await snapshot(), { version: 2, ...legacy }, 'Chuyển bản lưu cũ sang bản mới');
+    assert.deepEqual(await snapshot(), { version: 3, ...legacy }, 'Chuyển bản lưu cũ sang bản mới');
     assert.deepEqual(await evaluate('JSON.parse(localStorage.getItem("rubik-play-v1"))'), legacy, 'Giữ bản cũ làm bản phục hồi');
     await checkColors(legacy.colors, 'Bản lưu cũ hiển thị đúng sau khi chuyển');
     await evaluate('localStorage.setItem("rubik-play-v2", "{broken"); localStorage.removeItem("rubik-play-v1")');
@@ -292,39 +322,66 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await open(); // mở lại ở màn hình hẹp: bảng điều khiển đóng sẵn
     assert(await evaluate('document.querySelector("#play-panel").hidden'), 'Màn hình hẹp: bảng điều khiển đóng sẵn');
-    assert.match(await text('.play-gesture-hint'), /1 ngón: một lớp · 2 ngón: hai lớp · 3 ngón: nhìn quanh/);
+    assert.match(await text('.play-gesture-hint'), /1 ngón: một hàng\/cột · 2 ngón: hai hàng\/cột, mỗi ngón một chiều · 3 ngón: nhìn quanh/);
     await reset();
     let expected = SOLVED;
-    const turned = async (token, label) => {
+    const turned = async (entry, label) => {
       await ready();
-      expected = P.apply(expected, token);
+      expected = P.applyAll(expected, entry);
       await checkColors(expected, label);
+      assert.equal((await snapshot()).past.at(-1), entry, `${label}: lịch sử ghi một lượt`);
     };
-    await multiDrag([await sticker(19)], [-60, 0]);
+    const restingView = await transform();
+    await multiDrag([await sticker(19)], [-60, 0], {
+      onPlaced: async () => {
+        assert.equal(await count('#play-cube .cubie.touch-cubie'), 1, 'Đặt một ngón tô sáng viên đang chạm');
+        assert.equal(await count('#play-cube .cubie.preview-layer'), 0);
+      },
+      onMoved: async () => {
+        assert.equal(await count('#play-cube .cubie.preview-layer'), 9, 'Rõ hướng: tô sáng cả hàng');
+        assert.equal(await count('#play-cube .cubie.touch-cubie'), 0, 'Rõ hướng: bỏ tô viên');
+      },
+    });
     await turned('U', 'Một ngón vuốt hàng trên: U');
+    assert.equal(await count('#play-cube .cubie.touch-cubie, #play-cube .cubie.preview-layer'), 0, 'Nhấc tay bỏ tô sáng');
+    await noDarkCells('Sau nước một ngón');
+    assert.equal(await transform(), restingView, 'Dựng lại khối sau nước xoay trả góc nhìn về đúng chỗ');
     await multiDrag([await sticker(23)], [0, -50], { hold: 0, steps: 2 });
     await turned('R', 'Một ngón vuốt nhanh cột phải: R');
     await multiDrag([await sticker(19)], [0, 60]);
     await turned('M', 'Một ngón vuốt cột giữa xuống: M');
     await multiDrag([await sticker(22)], [60, 0]);
     await turned('E', 'Một ngón vuốt qua ô tâm sang phải: E');
-    await multiDrag([await sticker(19), await background()], [-60, 0], {
+    await multiDrag([await sticker(21), await sticker(23)], [[0, 60], [0, -60]], {
+      onPlaced: async () => {
+        assert.equal(await count('#play-cube .cubie.touch-cubie'), 2, 'Đặt hai ngón tô sáng hai viên');
+        await screenshot('touch-highlight.png');
+      },
       onMoved: async () => {
-        assert(await evaluate('document.querySelectorAll("#play-cube .cubie.preview-layer").length === 18'), 'Tô sáng đủ hai lớp khi kéo');
-        assert.match(await text('#play-gesture'), /2 ngón · Uw/);
-        await screenshot('two-fingers.png');
+        assert.equal(await count('#play-cube .cubie.preview-layer'), 18, 'Tô sáng đủ hai cột khi kéo');
+        assert.equal(await count('#play-cube .cubie.touch-cubie'), 0);
+        assert.match(await text('#play-gesture'), /2 ngón · L R$/);
+        await screenshot('two-layers-opposite.png');
       },
     });
     assert.equal(await evaluate('Array.from(document.querySelectorAll("#play-cube .cubie"), (c) => c.style.transform).filter((t) => t.includes("rotate3d")).length'),
       18, 'Hai lớp chuyển động cùng lúc');
-    await turned('Uw', 'Hai ngón (mốc hàng trên, ngón kia ở nền): Uw');
-    await multiDrag([await background('right'), await sticker(23)], [0, -55]);
-    await turned('Rw', 'Hai ngón, ngón mốc đặt sau: Rw');
+    await turned('L R', 'Hai ngón ngược chiều: cột trái xuống, cột phải lên là L R');
+    await noDarkCells('Sau lượt hai ngón');
+    await multiDrag([await sticker(19), await sticker(25)], [-60, 0]);
+    await turned("U D'", "Hai ngón cùng chiều: hàng trên và hàng dưới sang trái là U D'");
+    await multiDrag([await sticker(19), await sticker(22)], [[-60, 0], [60, 0]]);
+    await turned('U E', 'Hai ngón ngược chiều trên hàng trên và hàng giữa: U E');
     const historyLength = (await snapshot()).past.length;
     await click('#play-undo'); await ready();
-    expected = P.apply(expected, "Rw'");
-    await checkColors(expected, 'Hoàn tác nước hai lớp bằng một lần bấm');
+    expected = P.applyAll(expected, P.inverseEntry('U E'));
+    await checkColors(expected, 'Hoàn tác lượt hai ngón bằng một lần bấm');
     assert.equal((await snapshot()).past.length, historyLength - 1);
+    await click('#play-redo'); await ready();
+    expected = P.applyAll(expected, 'U E');
+    await checkColors(expected, 'Làm lại lượt hai ngón bằng một lần bấm');
+    await click('#play-undo'); await ready();
+    expected = P.applyAll(expected, P.inverseEntry('U E'));
     const beforeThree = await snapshot();
     assert.equal(beforeThree.future.length, 1);
     angle = await transform();
@@ -357,12 +414,23 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
     await unchanged('Thêm ngón sau khi khóa hủy lượt an toàn');
     await multiDrag([await sticker(19), await sticker(21), await sticker(23), await background()], [50, 0]);
     await unchanged('Bốn ngón không tạo nước');
-    await multiDrag([await sticker(20), await background()], [[0, -60], [60, 0]]); // mốc ở góc: trục nào cũng là lớp ngoài
-    await unchanged('Hai ngón lệch hướng không tạo nước');
-    assert.match(await text('#play-status'), /cùng một hướng/);
-    await multiDrag([await sticker(19), await background()], [0, 60]);
-    await unchanged('Hai ngón với mốc ở cột giữa không tự đoán lớp');
-    assert.match(await text('#play-status'), /hàng hoặc cột ngoài/);
+    await multiDrag([await sticker(23), await background()], [[0, -60], [0, 60]]);
+    await unchanged('Hai ngón, một ngón ở vùng nền: không tạo nước');
+    assert.match(await text('#play-status'), /cả hai ngón lên khối/);
+    await multiDrag([await sticker(19), await sticker(22)], [0, 60]);
+    await unchanged('Hai ngón trên cùng một cột: không tạo nước');
+    assert.match(await text('#play-status'), /hai hàng hoặc hai cột khác nhau/);
+    await multiDrag([await sticker(18), await sticker(26)], [[-60, 0], [0, -60]]);
+    await unchanged('Một ngón kéo hàng, ngón kia kéo cột: không tạo nước');
+    assert.match(await text('#play-status'), /song song/);
+    await multiDrag([await sticker(21), await sticker(23)], [[0, 60], [0, -4]]);
+    await unchanged('Hai ngón, một ngón không kéo: không tạo nước');
+    assert.match(await text('#play-status'), /cả hai ngón đủ xa/);
+    angle = await transform();
+    await multiDrag([await background()], [70, 35]);
+    await unchanged('Một ngón kéo vùng nền không xoay khối');
+    assert.equal(await transform(), angle, 'Một ngón kéo vùng nền không đổi góc nhìn');
+    assert.match(await text('#play-status'), /3 ngón để đổi góc nhìn/);
     await multiDrag([await sticker(19)], [6, 0]);
     await unchanged('Vuốt quá ngắn không tạo nước');
     const cancelPoint = await sticker(23);
@@ -416,10 +484,12 @@ const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'rubik-play-'));
       const reachable = await evaluate(`(() => {
         const r = document.querySelector('#play-sequence').getBoundingClientRect();
         const close = document.querySelector('#play-panel-close').getBoundingClientRect();
-        return !document.querySelector('#play-panel').hidden && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth &&
-          close.top >= 0 && close.bottom <= innerHeight && document.elementFromPoint(close.left + close.width / 2, close.top + close.height / 2)?.closest('#play-panel-close');
+        const ok = !document.querySelector('#play-panel').hidden && r.top >= -1 && r.bottom <= innerHeight + 1 && r.right <= innerWidth + 1 &&
+          close.top >= -1 && close.bottom <= innerHeight + 1 && !!document.elementFromPoint(close.left + close.width / 2, close.top + close.height / 2)?.closest('#play-panel-close');
+        return { ok, input: [Math.round(r.top), Math.round(r.bottom)], close: [Math.round(close.top), Math.round(close.bottom)], height: innerHeight,
+          focused: document.activeElement.id, scrollTop: Math.round(document.querySelector('#play-panel').scrollTop) };
       })()`);
-      assert(reachable, `Bảng điều khiển và ô công thức tiếp cận được ${width}×${height}`);
+      assert(reachable.ok, `Bảng điều khiển và ô công thức tiếp cận được ${width}×${height}: ${JSON.stringify(reachable)}`);
       if (width === 390) await screenshot('mobile-panel.png');
       if (width === 844) await screenshot('landscape.png');
       await click('#play-panel-close');

@@ -2,6 +2,8 @@
  * Hiển thị khối Rubik 3D bằng CSS 3D transform, có animation cho từng bước xoay.
  * Kéo chuột / vuốt để xoay góc nhìn. Khi có options.onTurn (Chơi tự do), dùng Rubik.PlayGesture để nhận 1/2/3 ngón.
  * Lớp được mô tả chung bằng { axis, layers }: axis 0 = x (R), 1 = y (U), 2 = z (F); layers là toạ độ -1/0/1.
+ * Mỗi ô màu (.sticker) chính là mặt ngoài của viên, không lồng phần tử con. Trên iPhone, sau hoạt ảnh có lúc vài ô hiện
+ * nền tối của mặt viên (ô bị đen) cho tới khi đổi góc nhìn; bớt một tầng phần tử và refresh() nhằm tránh lỗi vẽ đó.
  */
 (function (root) {
   'use strict';
@@ -60,11 +62,9 @@
       }
 
       this.stickers = C.FACELETS.map((f, index) => {
-        const cubie = this.cubies.get(f.pos.join(','));
-        const st = document.createElement('div');
-        st.className = 'sticker';
+        const st = this.cubies.get(f.pos.join(',')).faces[NORMAL_TO_FACE[f.normal.join(',')]];
+        st.classList.add('sticker');
         if (this.options.onTurn) st.dataset.facelet = String(index);
-        cubie.faces[NORMAL_TO_FACE[f.normal.join(',')]].appendChild(st);
         return st;
       });
       this.applyView();
@@ -106,23 +106,48 @@
       return target;
     }
 
+    // target: mặt, một mô tả { axis, layers } hoặc mảng mô tả (hai lớp của cử chỉ hai ngón); null để bỏ tô.
     markLayers(className, target) {
-      const spec = Cube3D.layerSpec(target);
+      const specs = (Array.isArray(target) ? target : [target]).map(Cube3D.layerSpec).filter(Boolean);
       this.cubies.forEach((c) => {
-        c.el.classList.toggle(className, !!spec && spec.layers.includes(c.pos[spec.axis]));
+        c.el.classList.toggle(className, specs.some((spec) => spec.layers.includes(c.pos[spec.axis])));
       });
+      return specs.length > 0;
     }
 
     setHighlight(target) { this.markLayers('active-layer', target); }
 
-    // Tô sáng lớp đang được kéo; ẩn tô sáng lớp đang chọn để không nhầm hai lớp.
+    // Tô sáng lớp đang được kéo; ẩn tô sáng lớp đang chọn để không nhầm lớp.
     setPreview(target) {
-      this.markLayers('preview-layer', target);
-      this.container.classList.toggle('gesturing', !!target);
+      this.previewing = this.markLayers('preview-layer', target);
+      this.syncGesturing();
     }
 
-    applyView() {
-      this.root.style.transform = `scale3d(${this.scale}, ${this.scale}, ${this.scale}) rotateX(${this.view.rx}deg) rotateY(${this.view.ry}deg)`;
+    // Tô sáng các viên đang có ngón đặt lên nhưng chưa rõ kéo hàng hay cột (facelets: mảng số ô).
+    setTouched(facelets) {
+      const keys = new Set((facelets || []).map((index) => C.FACELETS[index] && C.FACELETS[index].pos.join(',')));
+      this.cubies.forEach((c, key) => c.el.classList.toggle('touch-cubie', keys.has(key)));
+      this.touching = keys.size > 0;
+      this.syncGesturing();
+    }
+
+    syncGesturing() { this.container.classList.toggle('gesturing', !!(this.previewing || this.touching)); }
+
+    applyView(nudge = 0) {
+      this.root.style.transform = `scale3d(${this.scale}, ${this.scale}, ${this.scale}) rotateX(${this.view.rx + nudge}deg) rotateY(${this.view.ry}deg)`;
+    }
+
+    /*
+     * Buộc trình duyệt dựng lại toàn khối sau một lượt xoay: lệch góc nhìn một lượng không thấy được trong một khung
+     * hình rồi trả về. Trên iPhone, vài ô có thể bị vẽ đen sau hoạt ảnh cho tới khi đổi góc nhìn; bước này làm thay
+     * thao tác đó. Vô hại với trình duyệt khác nên áp dụng chung.
+     */
+    refresh() {
+      if (typeof requestAnimationFrame !== 'function') return;
+      requestAnimationFrame(() => {
+        this.applyView(0.01);
+        requestAnimationFrame(() => this.applyView());
+      });
     }
 
     // Co giãn khối theo vùng chứa (sân chơi toàn màn hình), chừa khoảng trống quanh khối để đặt thêm ngón.
@@ -248,7 +273,8 @@
           orbitFrom = null;
         },
         orbitEnd: () => { orbitFrom = null; },
-        commit: (token) => o.onTurn(token),
+        touch: (facelets) => this.setTouched(facelets),
+        commit: (tokens) => o.onTurn(tokens),
         tap: (index) => o.onSelect(C.FACELETS[index].face),
         hint: (text) => o.onHint(text),
         status: (info) => { if (o.onGesture) o.onGesture(info); },
@@ -274,44 +300,54 @@
 
     cancelGesture(note) { if (this.gesture) this.gesture.abort(note); }
 
+    // Mô tả chung { axis, layers, dir, power } của một nước: chuỗi 'R2', { face, power } hoặc mô tả sẵn.
+    static turnSpec(move) {
+      if (typeof move === 'string') move = C.parseMove(move);
+      if (move.axis !== undefined) return move;
+      const n = C.NORMALS[move.face];
+      const axis = n.findIndex((v) => v !== 0);
+      return { axis, layers: [n[axis]], dir: n[axis], power: move.power };
+    }
+
     /*
      * Animation một bước xoay. Sau khi xong, gọi onDone để cập nhật màu mới
      * (cùng một khung hình để tránh nhấp nháy).
-     * move: { face, power } (Học chơi/Hướng dẫn giải) hoặc { axis, layers, dir, power } (Chơi tự do, Rubik.playMoves.describe).
+     * move: { face, power } (Học chơi/Hướng dẫn giải), { axis, layers, dir, power } (Chơi tự do, Rubik.playMoves.describe)
+     * hoặc mảng các mô tả đó: các lớp không chung viên, chuyển động cùng lúc, mỗi lớp theo trục và chiều của nó.
      */
     animateMove(move, duration, onDone) {
-      if (typeof move === 'string') move = C.parseMove(move);
-      let spec = move;
-      if (move.axis === undefined) {
-        const n = C.NORMALS[move.face];
-        const axisIndex = n.findIndex((v) => v !== 0);
-        spec = { axis: axisIndex, layers: [n[axisIndex]], dir: n[axisIndex], power: move.power };
-      }
-      const n = [0, 0, 0];
-      n[spec.axis] = spec.dir;
-      const finalAngle = spec.power === 3 ? -90 : 90 * spec.power;
-      const layer = [];
-      this.cubies.forEach((c) => {
-        if (spec.layers.includes(c.pos[spec.axis])) layer.push(c);
+      const specs = (Array.isArray(move) ? move : [move]).map(Cube3D.turnSpec);
+      const used = new Set();
+      const groups = specs.map((spec) => {
+        const n = [0, 0, 0];
+        n[spec.axis] = spec.dir;
+        const cubies = [];
+        this.cubies.forEach((c) => {
+          if (!spec.layers.includes(c.pos[spec.axis])) return;
+          if (used.has(c)) throw new Error('Các lớp chuyển động cùng lúc không được chung viên');
+          used.add(c);
+          cubies.push(c);
+        });
+        return { cubies, axis: `${n[0]}, ${-n[1]}, ${n[2]}`, angle: spec.power === 3 ? -90 : 90 * spec.power };
       });
-      const axis = `${n[0]}, ${-n[1]}, ${n[2]}`;
       this.animating = true;
       return new Promise((resolve) => {
         const t0 = performance.now();
-        const total = duration * (spec.power === 2 ? 1.5 : 1);
+        const total = duration * (specs.some((spec) => spec.power === 2) ? 1.5 : 1);
         const step = (now) => {
           const t = Math.min(1, (now - t0) / total);
           const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
           if (t < 1) {
-            layer.forEach((c) => {
-              c.el.style.transform = `rotate3d(${axis}, ${finalAngle * e}deg) ${this.translate(c.pos)}`;
-            });
+            groups.forEach((g) => g.cubies.forEach((c) => {
+              c.el.style.transform = `rotate3d(${g.axis}, ${g.angle * e}deg) ${this.translate(c.pos)}`;
+            }));
             requestAnimationFrame(step);
             return;
           }
-          layer.forEach((c) => { c.el.style.transform = this.translate(c.pos); });
+          groups.forEach((g) => g.cubies.forEach((c) => { c.el.style.transform = this.translate(c.pos); }));
           if (onDone) onDone();
           this.animating = false;
+          this.refresh();
           resolve();
         };
         requestAnimationFrame(step);

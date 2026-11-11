@@ -75,6 +75,8 @@ Toàn màn hình không thay thế việc giữ quyền nhận con trỏ khi ké
 
 ### 4.1. Một ngón: xoay một lớp
 
+> Đã thay bởi `ke-hoach-cu-chi-hai-ngon-doc-lap.md` (11/11/2026): một ngón ở vùng nền không còn đổi góc nhìn; đặt ngón tô sáng viên đang chạm.
+
 1. Đặt ngón lên một ô của khối.
 2. Kéo theo hướng muốn xoay. Ô bắt đầu là mốc; hướng kéo xác định hàng hoặc cột theo góc nhìn hiện tại.
 3. Khi hướng đủ rõ, tô sáng lớp đã chọn và hiện tên lớp.
@@ -85,6 +87,8 @@ Hỗ trợ mọi lớp ngoài và cả ba lớp giữa. Kéo qua ô tâm trong c
 Chiều xoay tính theo vị trí lúc nhấc tay so với điểm đầu: kéo ngược về gần điểm đầu thì bỏ lượt. Một ngón bắt đầu ở vùng nền ngoài khối vẫn đổi góc nhìn như hiện nay; đây là đường dự phòng không đổi khối khi máy dành cử chỉ ba ngón cho hệ thống (nhiều máy Android vuốt ba ngón để chụp màn hình, iOS dùng ba ngón cho hoàn tác và trợ năng).
 
 ### 4.2. Hai ngón: xoay hai lớp
+
+> Đã thay bởi `ke-hoach-cu-chi-hai-ngon-doc-lap.md` (11/11/2026): mỗi ngón kéo một hàng/cột của hai lớp song song khác nhau theo chiều riêng, ghi hai nước trong một lượt; kiểu `Rw` chỉ còn ở chế độ 2 lớp của chuột và nút.
 
 1. Đặt một ngón lên hàng/cột ngoài làm mốc, đặt thêm ngón thứ hai trong sân chơi trước khi bắt đầu kéo. Ngón mốc là ngón chạm sớm nhất **nằm trên khối**; nếu cả hai ngón đều ở vùng nền thì không xoay và hiện hướng dẫn.
 2. Kéo hai ngón theo cùng hướng; ngón thứ hai xác định kiểu xoay hai lớp, không cần đặt chính xác trên lớp giữa.
@@ -237,7 +241,7 @@ Bước 1–5 đã làm trên bản làm việc. Bước 6 còn lại: kiểm tr
 Các điểm chỉnh dưới đây lấp chỗ còn bỏ ngỏ, không đổi lựa chọn đã xác nhận ở mục 1:
 
 1. Ngón mốc của hai ngón là ngón sớm nhất nằm trên khối, không phải ngón chạm đầu tiên: hai ngón đặt gần như cùng lúc nên thứ tự chạm không ổn định.
-2. Một ngón kéo từ vùng nền tiếp tục đổi góc nhìn, làm đường dự phòng khi hệ điều hành chiếm cử chỉ ba ngón.
+2. Một ngón kéo từ vùng nền tiếp tục đổi góc nhìn, làm đường dự phòng khi hệ điều hành chiếm cử chỉ ba ngón. **Đã bỏ** theo `ke-hoach-cu-chi-hai-ngon-doc-lap.md`: chỉ 3 ngón đổi góc nhìn bằng cảm ứng; nút ⟲ Góc nhìn chỉ đặt lại góc mặc định, chuột vẫn kéo nền để nhìn quanh.
 3. Vuốt nhanh hơn khoảng ghép nhóm vẫn được chốt khi nhấc tay; chiều xoay tính theo vị trí lúc nhấc.
 4. iPhone chỉ có chế độ phủ kín trang; thêm dạng `webkit` cho Safari trên iPad đời cũ.
 5. Nút Quay lại về tab trước đó; đầu trang đặt `inert` khi sân chơi mở; thông báo nằm trong vùng toàn màn hình.

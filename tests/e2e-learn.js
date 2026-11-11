@@ -81,7 +81,7 @@ const check = (label, ok) => {
     await waitFor('document.querySelector("#learn-counter").textContent.includes("4/4") && document.querySelector("#learn-play").getAttribute("aria-pressed") === "false"');
     check('Tự chạy hết công thức giải xong khối mẫu', await evaluate(`
       ['up', 'right', 'front', 'down', 'left', 'back'].every(face => {
-        const stickers = Array.from(document.querySelectorAll('#learn-cube .cubie-face.' + face + ' .sticker'));
+        const stickers = Array.from(document.querySelectorAll('#learn-cube .cubie-face.sticker.' + face));
         return stickers.length === 9 && new Set(stickers.map(e => e.style.background)).size === 1;
       })
     `));

@@ -4,6 +4,7 @@
  *   axis: 0 = x (R), 1 = y (U), 2 = z (F); layers: toạ độ các lớp trên trục đó (-1, 0, 1);
  *   dir: +1 xoay như mặt R/U/F, -1 xoay như mặt L/D/B (chiều kim đồng hồ khi nhìn từ mặt đó).
  * Quy ước lớp giữa: M theo L, E theo D, S theo F. Không xử lý xoay cả khối x/y/z.
+ * Lịch sử ghi theo lượt: một lượt là 1 nước hoặc 2 nước trên hai lớp song song (parseEntry).
  */
 (function (root) {
   'use strict';
@@ -75,6 +76,25 @@
     return { base: m.base, power: (4 - m.power) % 4 || 4 };
   };
 
+  /*
+   * Một lượt của Chơi tự do: một nước, hoặc hai nước trên hai lớp song song khác nhau (kéo hai ngón, mỗi ngón một
+   * chiều). Hai lớp không chung viên nên chuyển động cùng lúc được và thứ tự không đổi kết quả.
+   * Nhận chuỗi "R L'" hoặc mảng ký hiệu/nước; trả về mảng nước, ném lỗi nếu không phải một lượt hợp lệ.
+   */
+  function parseEntry(entry) {
+    const moves = Array.isArray(entry) ? entry.map(parse) : parseSequence(entry);
+    if (!moves.length || moves.length > 2) throw new Error('Một lượt phải có 1 hoặc 2 nước: ' + entry);
+    if (moves.length === 2) {
+      const [a, b] = moves.map((m) => BASES[m.base]);
+      if (a.axis !== b.axis || a.layers.some((layer) => b.layers.includes(layer))) {
+        throw new Error('Hai nước trong một lượt phải là hai lớp song song khác nhau: ' + entry);
+      }
+    }
+    return moves;
+  }
+  const entryToString = (entry) => parseEntry(entry).map(toString).join(' ');
+  const inverseEntry = (entry) => parseEntry(entry).reverse().map(inverse);
+
   function apply(state, move) {
     const m = parse(move);
     const perm = PERM[m.base];
@@ -114,6 +134,7 @@
   root.Rubik.playMoves = {
     BASES, NAMES, SLICES, PERM,
     parse, parseSequence, toString, normalize, inverse, apply, applyAll, describe, fromLayer,
+    parseEntry, entryToString, inverseEntry,
     centersValid, isSolved,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

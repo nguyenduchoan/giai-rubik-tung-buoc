@@ -1,10 +1,14 @@
-/* Khối tự chơi và hai ngăn lịch sử; không dùng dữ liệu camera/bộ giải. */
+/*
+ * Khối tự chơi và hai ngăn lịch sử; không dùng dữ liệu camera/bộ giải.
+ * Mỗi mục lịch sử là một lượt: "R" hoặc hai lớp song song kéo bằng hai ngón "R L'" (hoàn tác/làm lại cả lượt).
+ */
 (function (root) {
   'use strict';
   const C = root.Rubik.cube;
   const P = root.Rubik.playMoves;
   const LIMIT = 200;
-  const VERSION = 2;
+  const VERSION = 3;
+  const READABLE = [undefined, 2, 3]; // bản cũ không có version (v1) và v2 chỉ có lượt một nước, vẫn đọc được
 
   /*
    * Khối hợp lệ: 54 ô mang sáu màu U R F D L B, mỗi màu 9 ô, các viên ghép được (kiểm tra theo màu tâm) và sáu tâm
@@ -16,16 +20,16 @@
   }
 
   class PlayState {
-    // saved: bản lưu phiên bản 2 hoặc bản cũ (chỉ có colors/past/future). restored cho biết đã nhận bản lưu.
+    // saved: bản lưu phiên bản 3, 2 hoặc bản cũ (chỉ có colors/past/future). restored cho biết đã nhận bản lưu.
     constructor(saved) {
       this.reset();
       this.restored = false;
       if (!saved || typeof saved !== 'object') return;
       try {
-        if ((saved.version !== undefined && saved.version !== VERSION) || !validColors(saved.colors)) return;
+        if (!READABLE.includes(saved.version) || !validColors(saved.colors)) return;
         const history = (items) => {
           if (!Array.isArray(items) || items.length > LIMIT || items.some((item) => typeof item !== 'string')) throw new Error('Lịch sử không hợp lệ');
-          return items.map(P.normalize);
+          return items.map(P.entryToString);
         };
         const past = history(saved.past), future = history(saved.future);
         if (past.length + future.length > LIMIT) return;
@@ -42,26 +46,27 @@
       this.future = [];
     }
 
-    move(token) {
-      const move = P.parse(token);
-      this.colors = P.apply(this.colors, move);
-      this.past.push(P.toString(move));
+    // entry: một ký hiệu, chuỗi lượt "R L'" hoặc mảng 1–2 ký hiệu; không hợp lệ thì ném lỗi và giữ nguyên trạng thái.
+    move(entry) {
+      const moves = P.parseEntry(entry);
+      this.colors = P.applyAll(this.colors, moves);
+      this.past.push(P.entryToString(moves));
       if (this.past.length > LIMIT) this.past.shift();
       this.future = [];
     }
 
     undo() {
       if (!this.past.length) return;
-      const token = this.past.pop();
-      this.colors = P.apply(this.colors, P.inverse(token));
-      this.future.push(token);
+      const entry = this.past.pop();
+      this.colors = P.applyAll(this.colors, P.inverseEntry(entry));
+      this.future.push(entry);
     }
 
     redo() {
       if (!this.future.length) return;
-      const token = this.future.pop();
-      this.colors = P.apply(this.colors, token);
-      this.past.push(token);
+      const entry = this.future.pop();
+      this.colors = P.applyAll(this.colors, P.parseEntry(entry));
+      this.past.push(entry);
     }
 
     // Đã giải khi mỗi mặt cùng màu với tâm của nó, ở bất kỳ hướng cầm nào.

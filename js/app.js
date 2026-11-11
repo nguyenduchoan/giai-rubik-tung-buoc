@@ -1541,7 +1541,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111play2');
+    const w = new Worker('js/solver-worker.js?v=20261111play3');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;

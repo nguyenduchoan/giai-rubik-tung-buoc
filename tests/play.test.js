@@ -65,13 +65,14 @@ assert.deepEqual(state.colors, scrambledState);
 state.undo();
 const restored = new PlayState(JSON.parse(JSON.stringify(state.snapshot())));
 assert.deepEqual(restored.snapshot(), state.snapshot(), 'Tải lại giữ khối và cả hai ngăn lịch sử');
-assert.equal(restored.snapshot().version, 2);
+assert.equal(restored.snapshot().version, 3);
 restored.redo();
 assert.deepEqual(restored.colors, scrambledState);
 state.move('u');
 assert.equal(state.past.at(-1), 'Uw', 'Lịch sử lưu dạng chuẩn Uw');
 assert.equal(state.future.length, 0, 'Nước mới sau hoàn tác phải bỏ nhánh làm lại');
-assert.throws(() => state.move('R X'), 'Không chấp nhận công thức như một nước đơn');
+assert.throws(() => state.move('R X'), 'Ký hiệu sai làm hỏng cả lượt');
+assert.throws(() => state.move("R U R'"), 'Không chấp nhận công thức như một lượt');
 const before = state.snapshot();
 assert.throws(() => state.move('bad'));
 assert.deepEqual(state.snapshot(), before, 'Nước không hợp lệ không được sửa trạng thái');
@@ -93,7 +94,7 @@ assert(migrated.restored && migrated.past.length === 4 && same(migrated.colors, 
 const mirror = SOLVED.map((color) => (color === 'R' ? 'L' : color === 'L' ? 'R' : color));
 assert(C.validateColors(mirror).ok, 'Bộ kiểm tra theo tâm không phát hiện ảnh gương');
 assert(!new PlayState({ ...before, colors: mirror }).restored, 'Từ chối ảnh gương của khối');
-for (const bad of [null, 3, {}, { ...before, colors: [] }, { ...before, past: ['X'] }, { ...before, version: 3 },
+for (const bad of [null, 3, {}, { ...before, colors: [] }, { ...before, past: ['X'] }, { ...before, version: 4 }, { ...before, past: ['R U'] },
   { ...before, colors: C.applyMove(SOLVED, 'R').map(() => 'U') }, { ...before, colors: SOLVED.map((c) => c.toLowerCase()) },
   { ...before, future: Array(201).fill('R') }, { ...before, past: Array(150).fill('M'), future: Array(51).fill('R') }]) {
   const broken = new PlayState(bad);
@@ -110,7 +111,35 @@ bounded.reset();
 bounded.undo(); bounded.redo();
 assert(bounded.solved);
 assert.deepEqual(bounded.past, []);
-console.log('✓ Trạng thái: 45 kiểu nước, hoàn tác/làm lại, tải lại, bản lưu cũ, ảnh gương, giới hạn 200 nước');
+
+// Lượt hai ngón: hai nước trên hai lớp song song ghi thành một mục; hoàn tác/làm lại một lần cho cả lượt.
+const pair = new PlayState();
+pair.move(['R', "L'"]);
+pair.move('U  E2');
+assert.deepEqual(pair.past, ["R L'", 'U E2'], 'Lượt hai ngón ghi hai nước trong một mục');
+assert.deepEqual(pair.colors, P.applyAll(SOLVED, "R L' U E2"));
+pair.undo();
+assert.deepEqual(pair.colors, P.applyAll(SOLVED, "R L'"), 'Hoàn tác một lần lùi cả hai lớp');
+assert.deepEqual(pair.future, ['U E2']);
+pair.undo();
+assert(pair.solved);
+pair.redo();
+assert.deepEqual(pair.colors, P.applyAll(SOLVED, "R L'"), 'Làm lại một lần tiến cả hai lớp');
+pair.redo();
+const pairSaved = new PlayState(JSON.parse(JSON.stringify(pair.snapshot())));
+assert(pairSaved.restored && pairSaved.snapshot().version === 3);
+assert.deepEqual(pairSaved.snapshot(), pair.snapshot(), 'Tải lại giữ lượt hai ngón');
+const pairBefore = pair.snapshot();
+for (const bad of ['R U', 'R R', 'Rw M', 'M S', "R L' U", ' ', ['R', 'F']]) {
+  assert.throws(() => pair.move(bad), `Không phải một lượt hợp lệ: ${bad}`);
+}
+assert.deepEqual(pair.snapshot(), pairBefore, 'Lượt không hợp lệ không sửa trạng thái');
+assert.equal(P.entryToString(['Rw', 'L2']), 'Rw L2', 'Hai lớp kề nhau + lớp ngoài đối diện không chung viên');
+assert.deepEqual(P.inverseEntry("R L'").map(P.toString), ['L', "R'"], 'Nghịch đảo một lượt: đảo thứ tự và chiều');
+const version2 = { version: 2, colors: P.applyAll(SOLVED, "R U M"), past: ['R', 'U', 'M'], future: ['F'] };
+const fromVersion2 = new PlayState(version2);
+assert(fromVersion2.restored && fromVersion2.past.length === 3 && fromVersion2.snapshot().version === 3, 'Đọc được bản lưu phiên bản 2');
+console.log('✓ Trạng thái: 45 kiểu nước, lượt hai lớp song song, hoàn tác/làm lại, tải lại, bản lưu cũ, ảnh gương, giới hạn 200 lượt');
 
 // ---------- Chọn lớp theo hướng kéo, nhìn trực diện mặt trước ----------
 const view = Object.create(Cube3D.prototype);
@@ -170,24 +199,30 @@ for (const angles of [{ rx: -26, ry: -36 }, { rx: -40, ry: 30 }, { rx: 20, ry: -
 assert(sweep >= 200, `Quét quá ít hướng: ${sweep}`);
 console.log(`✓ Hướng vuốt chọn đúng lớp ngoài, lớp giữa và hai lớp ở nhiều góc nhìn (${sweep} hướng ở 7 góc nhìn)`);
 
+
 // ---------- Bộ nhận cử chỉ ----------
-function recorder({ canTurn = true } = {}) {
-  const log = { commits: [], taps: [], hints: [], orbit: [], previews: [], cancels: 0, status: '' };
+// Mô phỏng nhìn trực diện mặt trước (ô 18–26): kéo ngang chọn hàng (trục y: U/E/D), kéo dọc chọn cột (trục x: L/M/R);
+// chiều dương là sang phải/xuống. options.pick thay bằng hình học thật khi cần.
+function recorder({ canTurn = true, pick } = {}) {
+  const log = { commits: [], taps: [], hints: [], orbit: [], previews: [], touches: [], cancels: 0, status: '' };
   const handler = {
     canTurn: () => canTurn,
-    pick: (facelet, dx, dy, layers) => {
+    pick: pick || ((facelet, dx, dy, layers) => {
       if (facelet === 99) return { error: 'mốc giữa' };
       if (Math.abs(dx) < Math.abs(dy) * 1.2 && Math.abs(dy) < Math.abs(dx) * 1.2) return null;
       const horizontal = Math.abs(dx) > Math.abs(dy);
-      const name = (horizontal ? 'H' : 'V') + (layers === 2 ? 'w' : '');
-      return { tx: horizontal ? 1 : 0, ty: horizontal ? 0 : 1, tokens: [name, name + "'"], spec: { axis: horizontal ? 1 : 0, layers: [1] } };
-    },
-    preview: (spec) => log.previews.push(spec),
+      const row = Math.floor((facelet - 18) / 3), col = (facelet - 18) % 3;
+      const axis = horizontal ? 1 : 0, layer = horizontal ? 1 - row : col - 1;
+      const name = (horizontal ? ['D', 'E', 'U'] : ['L', 'M', 'R'])[layer + 1] + (layers === 2 ? 'w' : '');
+      return { axis, layer, tx: horizontal ? 1 : 0, ty: horizontal ? 0 : 1, tokens: [name, name + "'"], spec: { axis, layers: [layer] } };
+    }),
+    preview: (specs) => log.previews.push(specs),
+    touch: (facelets) => log.touches.push(facelets.slice()),
     orbitStart: () => log.orbit.push('start'),
     orbit: (dx, dy) => log.orbit.push([Math.round(dx), Math.round(dy)]),
     orbitCancel: () => { log.cancels++; },
     orbitEnd: () => log.orbit.push('end'),
-    commit: (token) => log.commits.push(token),
+    commit: (tokens) => log.commits.push(tokens.join(' ')),
     tap: (facelet) => log.taps.push(facelet),
     hint: (text) => log.hints.push(text),
     status: (info) => { log.status = info.text; },
@@ -196,17 +231,32 @@ function recorder({ canTurn = true } = {}) {
 }
 const touch = (id, x, y, t, facelet = null, primary = false) => ({ id, x, y, t, kind: 'touch', facelet, primary });
 const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, kind: 'mouse', facelet, primary: true, mode });
+// Đặt các ngón (mỗi ngón [id, x, y, ô]) rồi kéo mỗi ngón theo vectơ riêng qua vài bước; trả về vị trí cuối.
+function place(g, fingers, t = 0) {
+  fingers.forEach(([id, x, y, facelet], i) => g.down(touch(id, x, y, t + i * 10, facelet, i === 0)));
+}
+function drag(g, fingers, vectors, t = 200, steps = 4) {
+  for (let s = 1; s <= steps; s++) {
+    fingers.forEach(([id, x, y], i) => g.move(touch(id, x + vectors[i][0] * s / steps, y + vectors[i][1] * s / steps, t + s * 16)));
+  }
+  return fingers.map(([id, x, y], i) => [id, x + vectors[i][0], y + vectors[i][1]]);
+}
+const lift = (g, ends, t = 400) => ends.forEach(([id, x, y], i) => g.up(touch(id, x, y, t + i * 10)));
 
-{ // Một ngón xoay một lớp; chiều theo vị trí lúc nhấc.
+{ // Một ngón: tô viên khi đặt, tô cả hàng khi rõ hướng; chiều theo vị trí lúc nhấc.
   const { gesture: g, log } = recorder();
   g.down(touch(1, 100, 100, 0, 19, true));
+  assert.deepEqual(log.touches.at(-1), [19], 'Đặt ngón tô sáng viên đang chạm');
   g.move(touch(1, 110, 100, 50));
   assert.equal(log.commits.length, 0);
   g.move(touch(1, 160, 100, 200));
   assert.equal(g.phase, 'locked');
-  assert.match(log.status, /1 ngón · H/);
+  assert.deepEqual(log.previews.at(-1), [{ axis: 1, layers: [1] }], 'Rõ hướng: tô cả hàng');
+  assert.deepEqual(log.touches.at(-1), [], 'Rõ hướng: bỏ tô viên');
+  assert.match(log.status, /1 ngón · U$/);
   g.up(touch(1, 160, 100, 260));
-  assert.deepEqual(log.commits, ['H']);
+  assert.deepEqual(log.commits, ['U']);
+  assert.equal(log.previews.at(-1), null);
   assert.equal(g.phase, 'idle');
 }
 { // Kéo ngược về gần điểm đầu thì bỏ lượt.
@@ -223,26 +273,52 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   g.down(touch(1, 100, 100, 0, 19, true));
   g.move(touch(1, 80, 100, 40));
   g.up(touch(1, 40, 100, 80));
-  assert.deepEqual(log.commits, ["H'"]);
+  assert.deepEqual(log.commits, ["U'"]);
   g.down(touch(2, 100, 100, 500, 21, true));
   g.up(touch(2, 103, 101, 560));
   assert.deepEqual(log.taps, [21]);
+  assert.deepEqual(log.touches.at(-1), [], 'Nhấc tay bỏ tô viên');
 }
-{ // Hai ngón: ngón mốc là ngón sớm nhất nằm trên khối; nhấc từng ngón chỉ tạo một nước.
+{ // Chỉ 3 ngón đổi góc nhìn: một ngón kéo ở vùng nền không xoay, không đổi góc nhìn, có gợi ý.
   const { gesture: g, log } = recorder();
-  g.down(touch(1, 300, 300, 0, null, true));
-  g.down(touch(2, 100, 100, 40, 19));
-  g.move(touch(1, 300, 330, 220));
-  g.move(touch(2, 100, 130, 220));
+  g.down(touch(1, 100, 100, 0, null, true));
+  assert.deepEqual(log.touches.at(-1), []);
+  g.move(touch(1, 160, 100, 200));
+  g.up(touch(1, 160, 100, 250));
+  assert.deepEqual(log.orbit, []);
+  assert.deepEqual(log.commits, []);
+  assert.match(log.hints.at(-1), /3 ngón để đổi góc nhìn/);
+  assert.match(log.status, /ngoài khối/);
+}
+{ // Hai ngón ngược chiều trên hai cột: mỗi ngón một lớp, một chiều; trung bình gần 0 vẫn khóa; một lượt hai nước.
+  const { gesture: g, log } = recorder();
+  const fingers = [[1, 100, 100, 21], [2, 200, 100, 23]];
+  place(g, fingers);
+  assert.deepEqual(log.touches.at(-1), [21, 23], 'Đặt hai ngón tô hai viên');
+  g.move(touch(1, 100, 130, 220));
   assert.equal(g.phase, 'locked');
-  assert.match(log.status, /2 ngón · Vw/);
-  g.up(touch(2, 100, 140, 300));
-  assert.deepEqual(log.commits, ['Vw']);
+  assert.deepEqual(log.previews.at(-1), [{ axis: 0, layers: [-1] }], 'Ngón rõ hướng trước được tô cả cột');
+  assert.deepEqual(log.touches.at(-1), [23], 'Ngón kia vẫn tô viên');
+  assert.match(log.status, /2 ngón · L …/);
+  g.move(touch(2, 200, 70, 230));
+  assert.deepEqual(log.previews.at(-1), [{ axis: 0, layers: [-1] }, { axis: 0, layers: [1] }], 'Cả hai cột được tô');
+  assert.deepEqual(log.touches.at(-1), []);
+  assert.match(log.status, /2 ngón · L R'$/);
+  g.move(touch(1, 100, 160, 260)); g.move(touch(2, 200, 40, 260));
+  g.up(touch(2, 200, 40, 300));
+  assert.deepEqual(log.commits, ["L R'"], 'Thứ tự theo ngón đặt xuống');
   assert.equal(g.phase, 'wait');
-  g.move(touch(1, 300, 400, 320));
-  g.up(touch(1, 300, 420, 340));
-  assert.deepEqual(log.commits, ['Vw'], 'Ngón còn lại không tạo thêm nước');
+  g.move(touch(1, 100, 220, 320));
+  g.up(touch(1, 100, 220, 340));
+  assert.deepEqual(log.commits, ["L R'"], 'Ngón còn lại không tạo thêm nước');
   assert.equal(g.phase, 'idle');
+}
+{ // Hai ngón cùng chiều trên hai hàng; ngón đặt trước đứng trước; vuốt nhanh trước khoảng ghép ngón vẫn chốt.
+  const { gesture: g, log } = recorder();
+  const fingers = [[1, 100, 300, 25], [2, 100, 100, 19]];
+  place(g, fingers);
+  lift(g, drag(g, fingers, [[50, 0], [50, 0]], 30, 2), 70);
+  assert.deepEqual(log.commits, ['D U']);
 }
 { // Đặt thêm ngón trước khi khóa: đo lại từ đầu, không xoay sớm theo ngón thứ nhất.
   const { gesture: g, log } = recorder();
@@ -255,7 +331,24 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   g.move(touch(1, 113, 130, 300));
   g.move(touch(2, 201, 130, 300));
   g.up(touch(1, 113, 130, 320));
-  assert.deepEqual(log.commits, ['Vw']);
+  assert.deepEqual(log.commits, ['M R']);
+}
+for (const [label, fingers, vectors, hint] of [
+  ['Hai ngón trên cùng một cột', [[1, 100, 100, 19], [2, 100, 200, 22]], [[0, 60], [0, 60]], /hai hàng hoặc hai cột khác nhau/],
+  ['Hai ngón ngược chiều trên cùng một cột', [[1, 100, 100, 19], [2, 100, 200, 22]], [[0, 60], [0, -60]], /hai hàng hoặc hai cột khác nhau/],
+  ['Một ngón kéo hàng, ngón kia kéo cột', [[1, 100, 100, 18], [2, 200, 300, 26]], [[60, 0], [0, 60]], /song song/],
+  ['Một ngón ở vùng nền', [[1, 100, 100, 21], [2, 400, 100, null]], [[0, 60], [0, -60]], /cả hai ngón lên khối/],
+  ['Một ngón chưa kéo đủ xa', [[1, 100, 100, 21], [2, 200, 100, 23]], [[0, 60], [0, -5]], /cả hai ngón đủ xa/],
+  ['Một ngón kéo chéo mơ hồ', [[1, 100, 100, 21], [2, 200, 100, 23]], [[0, 60], [40, 40]], /cả hai ngón đủ xa/],
+]) {
+  const { gesture: g, log } = recorder();
+  place(g, fingers);
+  lift(g, drag(g, fingers, vectors));
+  assert.deepEqual(log.commits, [], `${label}: không xoay`);
+  assert.match(log.hints.at(-1), hint, `${label}: gợi ý đúng`);
+  assert.equal(log.previews.at(-1), null, `${label}: bỏ tô sáng`);
+  assert.deepEqual(log.touches.at(-1), [], `${label}: bỏ tô viên`);
+  assert.equal(g.phase, 'idle');
 }
 { // Thêm ngón sau khi khóa: hủy lượt, không đổi sang kiểu khác.
   const { gesture: g, log } = recorder();
@@ -269,13 +362,16 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   g.up(touch(2, 300, 300, 330));
   assert.deepEqual(log.commits, []);
   assert.equal(log.previews.at(-1), null, 'Bỏ tô sáng khi hủy');
+  assert.deepEqual(log.touches.at(-1), []);
   assert.equal(g.phase, 'idle');
 }
-{ // Ba ngón đổi góc nhìn, kể cả bắt đầu ở vùng nền; nhấc từng ngón không tạo nước hai lớp/một lớp.
+{ // Ba ngón đổi góc nhìn, kể cả bắt đầu ở vùng nền; ngón thứ ba bỏ tô viên; nhấc từng ngón không tạo nước.
   const { gesture: g, log } = recorder();
   g.down(touch(1, 100, 100, 0, null, true));
   g.down(touch(2, 150, 100, 20, 19));
-  g.down(touch(3, 200, 100, 40, null));
+  assert.deepEqual(log.touches.at(-1), [19]);
+  g.down(touch(3, 200, 100, 40, 23));
+  assert.deepEqual(log.touches.at(-1), [], 'Ba ngón không tô viên');
   g.move(touch(1, 130, 120, 220)); g.move(touch(2, 180, 120, 220)); g.move(touch(3, 230, 120, 220));
   assert.equal(log.orbit[0], 'start');
   assert.match(log.status, /3 ngón · đổi góc nhìn/);
@@ -285,6 +381,7 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   assert.deepEqual(log.commits, []);
   assert.equal(log.orbit.at(-1), 'end');
   assert.equal(log.cancels, 0);
+  assert(log.previews.every((specs) => specs === null), 'Ba ngón không tô lớp');
 }
 { // Ba ngón bị ngắt chạm: đưa góc nhìn về đầu cử chỉ.
   const { gesture: g, log } = recorder();
@@ -307,42 +404,19 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   assert.deepEqual(log.commits, []);
   assert.deepEqual(log.orbit, []);
 }
-{ // Hai ngón lệch hướng: không xoay, có hướng dẫn.
-  const { gesture: g, log } = recorder();
-  g.down(touch(1, 100, 100, 0, 19, true)); g.down(touch(2, 200, 100, 10));
-  g.move(touch(1, 100, 160, 250)); g.move(touch(2, 260, 100, 250));
-  g.up(touch(1, 100, 160, 300)); g.up(touch(2, 260, 100, 300));
-  assert.deepEqual(log.commits, []);
-  assert.match(log.hints.at(-1), /cùng một hướng/);
-}
 { // Bốn ngón: không xoay, chờ nhấc hết tay.
   const { gesture: g, log } = recorder();
   for (let id = 1; id <= 4; id++) g.down(touch(id, id * 50, 100, id * 10, 19, id === 1));
   assert.equal(g.phase, 'wait');
+  assert.deepEqual(log.touches.at(-1), []);
   for (let id = 1; id <= 4; id++) g.move(touch(id, id * 50 + 80, 100, 300));
   for (let id = 1; id <= 4; id++) g.up(touch(id, id * 50 + 80, 100, 320));
   assert.deepEqual(log.commits, []);
   assert.deepEqual(log.orbit, []);
   assert.equal(g.phase, 'idle');
 }
-{ // Hai ngón đều ở vùng nền, hoặc mốc ở lớp giữa: không xoay.
-  const { gesture: g, log } = recorder();
-  g.down(touch(1, 100, 100, 0, null, true)); g.down(touch(2, 200, 100, 10, null));
-  g.move(touch(1, 160, 100, 250)); g.move(touch(2, 260, 100, 250));
-  g.up(touch(1, 160, 100, 300)); g.up(touch(2, 260, 100, 300));
-  g.down(touch(1, 100, 100, 400, 99, true)); g.down(touch(2, 200, 100, 410));
-  g.move(touch(1, 160, 100, 650)); g.move(touch(2, 260, 100, 650));
-  g.up(touch(1, 160, 100, 700)); g.up(touch(2, 260, 100, 700));
-  assert.deepEqual(log.commits, []);
-  assert.match(log.hints[0], /ít nhất một ngón lên khối/);
-  assert.equal(log.hints[1], 'mốc giữa');
-}
-{ // Một ngón từ vùng nền đổi góc nhìn; đang bận thì không xoay lớp.
+{ // Đang bận thì không xoay lớp.
   const { gesture: g, log } = recorder({ canTurn: false });
-  g.down(touch(1, 100, 100, 0, null, true));
-  g.move(touch(1, 160, 100, 200));
-  g.up(touch(1, 160, 100, 250));
-  assert.equal(log.orbit[0], 'start');
   g.down(touch(1, 100, 100, 400, 19, true));
   g.move(touch(1, 160, 100, 600));
   g.up(touch(1, 160, 100, 650));
@@ -357,6 +431,7 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   g.up(touch(1, 200, 100, 260));
   assert.deepEqual(log.commits, []);
   assert.equal(log.status, 'Đã hủy');
+  assert.deepEqual(log.touches.at(-1), []);
 }
 { // Sự kiện nhấc tay bị mất: ngón chính mới bắt đầu lại từ đầu.
   const { gesture: g, log } = recorder();
@@ -364,15 +439,42 @@ const mouse = (x, y, t, facelet = null, mode = 'layer1') => ({ id: 1, x, y, t, k
   g.down(touch(7, 100, 100, 1000, 19, true));
   g.move(touch(7, 160, 100, 1200));
   g.up(touch(7, 160, 100, 1250));
-  assert.deepEqual(log.commits, ['H']);
+  assert.deepEqual(log.commits, ['U']);
 }
-{ // Chuột theo chế độ đang chọn: 1 lớp, 2 lớp, góc nhìn; không cần chờ khoảng ghép ngón.
+{ // Chuột theo chế độ đang chọn: 1 lớp, 2 lớp, góc nhìn; kéo vùng nền vẫn đổi góc nhìn; mốc 2 lớp ở lớp giữa bị từ chối.
   const { gesture: g, log } = recorder();
   g.down(mouse(100, 100, 0, 19)); g.move(mouse(140, 100, 10)); g.up(mouse(140, 100, 20));
-  g.down(mouse(100, 100, 100, 19, 'layer2')); g.move(mouse(100, 60, 110)); g.up(mouse(100, 60, 120));
+  g.down(mouse(100, 100, 100, 21, 'layer2')); g.move(mouse(100, 60, 110)); g.up(mouse(100, 60, 120));
   g.down(mouse(100, 100, 200, 19, 'view')); g.move(mouse(140, 100, 210)); g.up(mouse(140, 100, 220));
-  assert.deepEqual(log.commits, ['H', "Vw'"]);
+  assert.deepEqual(log.commits, ['U', "Lw'"]);
   assert.equal(log.orbit[0], 'start');
+  log.orbit.length = 0;
+  g.down(mouse(100, 100, 300, null)); g.move(mouse(140, 100, 310)); g.up(mouse(140, 100, 320));
+  assert.equal(log.orbit[0], 'start', 'Chuột kéo vùng nền đổi góc nhìn');
+  g.down(mouse(100, 100, 400, 99, 'layer2')); g.move(mouse(100, 160, 410)); g.up(mouse(100, 160, 420));
+  assert.equal(log.hints.at(-1), 'mốc giữa');
+  assert.deepEqual(log.commits, ['U', "Lw'"]);
 }
-console.log('✓ Cử chỉ: 1/2/3 ngón, ghép ngón, thêm ngón, nhấc từng ngón, lệch hướng, 4 ngón, hủy, chuột');
+console.log('✓ Cử chỉ: 1 ngón một lớp, 2 ngón hai lớp song song mỗi ngón một chiều, chỉ 3 ngón đổi góc nhìn, tô viên/lớp, ghép/thêm/nhấc ngón, 4 ngón, hủy, chuột');
+
+// ---------- Hai ngón với hình học thật: nhìn trực diện mặt trước ----------
+view.view = { rx: 0, ry: 0 };
+for (const [label, fingers, vectors, entry] of [
+  ['Cột trái xuống, cột phải lên (ngược chiều)', [[1, 100, 100, 21], [2, 200, 100, 23]], [[0, 60], [0, -60]], 'L R'],
+  ['Cột trái lên, cột phải xuống', [[1, 100, 100, 21], [2, 200, 100, 23]], [[0, -60], [0, 60]], "L' R'"],
+  ['Hàng trên và hàng dưới cùng sang trái', [[1, 100, 100, 19], [2, 100, 300, 25]], [[-60, 0], [-60, 0]], "U D'"],
+  ['Hàng trên sang trái, hàng giữa sang phải', [[1, 100, 100, 19], [2, 100, 200, 22]], [[-60, 0], [60, 0]], 'U E'],
+  ['Cột giữa và cột phải cùng lên', [[1, 100, 100, 19], [2, 200, 100, 23]], [[0, -60], [0, -60]], "M' R"],
+]) {
+  const { gesture: g, log } = recorder({ pick: (facelet, dx, dy, layers) => view.pickLayer(facelet, dx, dy, layers) });
+  place(g, fingers);
+  lift(g, drag(g, fingers, vectors));
+  assert.deepEqual(log.commits, [entry], label);
+  const played = new PlayState();
+  played.move(entry);
+  assert.deepEqual(played.colors, P.applyAll(SOLVED, entry), `${label}: khối đổi đúng`);
+  played.undo();
+  assert(played.solved, `${label}: hoàn tác một lần`);
+}
+console.log('✓ Hai ngón với hình học thật: L R, L\' R\', U D\', U E, M\' R');
 console.log('Rubik tự chơi: mô hình xoay, trạng thái, hướng vuốt và bộ nhận cử chỉ PASS');

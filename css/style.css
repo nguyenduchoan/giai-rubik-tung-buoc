@@ -374,11 +374,13 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
   position: absolute; inset: 0;
   background: #111;
   border-radius: 6px;
-  padding: 3px;
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
-.sticker { width: 100%; height: 100%; border-radius: 5px; }
-.cubie.active-layer .sticker { box-shadow: inset 0 0 0 2px #ffffffb0; }
+/* Ô màu là chính mặt ngoài của viên (nền = màu ô), viền tối vẽ bằng bóng trong; không lồng phần tử con để giảm lỗi
+   Safari trên iPhone vẽ ô thành nền tối sau hoạt ảnh. */
+.cubie-face.sticker { box-shadow: inset 0 0 0 3px #111; }
+.cubie.active-layer .sticker { box-shadow: inset 0 0 0 3px #111, inset 0 0 0 5px #ffffffb0; }
 
 .step-counter { color: var(--muted); text-align: center; }
 .step-move {
@@ -528,8 +530,10 @@ html.play-open, html.play-open body { overflow: hidden; overscroll-behavior: non
 .play-body { flex: 1; min-height: 0; display: flex; }
 .play-stage { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 #play-cube { position: absolute; inset: 0; height: auto; margin: 0; }
-#play-cube.gesturing .cubie.active-layer .sticker { box-shadow: none; }
-.cubie.preview-layer .sticker { box-shadow: inset 0 0 0 3px #fff, 0 0 10px #9dbbffaa; }
+#play-cube.gesturing .cubie.active-layer:not(.preview-layer):not(.touch-cubie) .sticker { box-shadow: inset 0 0 0 3px #111; }
+/* Viên đang có ngón đặt lên (chưa rõ hàng/cột) và lớp đang kéo: vòng trắng có viền tối để nổi trên mọi màu, phủ sáng nhẹ. */
+.cubie.preview-layer .sticker { box-shadow: inset 0 0 0 3px #111, inset 0 0 0 6px #fff, inset 0 0 0 8px #000a, inset 0 0 0 99px #ffffff26; }
+.cubie.touch-cubie .sticker { box-shadow: inset 0 0 0 3px #111, inset 0 0 0 7px #fff, inset 0 0 0 9px #000a, inset 0 0 0 99px #ffffff40; }
 .play-stage-top, .play-stage-bottom {
   position: absolute; left: 0; right: 0; padding: 8px 14px; text-align: center;
   pointer-events: none; text-shadow: 0 1px 3px #000c;
@@ -570,7 +574,7 @@ html.play-open, html.play-open body { overflow: hidden; overscroll-behavior: non
 .play-face-name { font-weight: 600; font-size: 0.95rem; }
 .play-form { margin-top: 18px; padding-top: 14px; border-top: 1px solid #34416a; }
 .play-form > label { display: block; font-weight: 600; margin-bottom: 8px; }
-#play-sequence { width: 100%; min-width: 0; padding: 11px 12px; background: #0f1727; border: 1px solid #34416a; border-radius: 8px; color: var(--text); font: 1rem ui-monospace, monospace; }
+#play-sequence { scroll-margin-bottom: 16px; width: 100%; min-width: 0; padding: 11px 12px; background: #0f1727; border: 1px solid #34416a; border-radius: 8px; color: var(--text); font: 1rem ui-monospace, monospace; }
 .play-error { color: #ffb1b1; font-size: 0.85rem; overflow-wrap: anywhere; }
 .play-error:empty { display: none; }
 .play-history { display: flex; gap: 6px; flex-wrap: wrap; padding: 0; list-style: none; }

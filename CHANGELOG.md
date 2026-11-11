@@ -6,6 +6,7 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ### Thay đổi & Cải tiến
 
+- **Chơi tự do: hai ngón xoay hai hàng/cột độc lập, chỉ ba ngón đổi góc nhìn**: 1 ngón chỉ xoay một hàng/cột; ngón đặt ở vùng nền không còn đổi góc nhìn (chuột vẫn kéo nền để nhìn quanh). 2 ngón đặt trên hai lớp song song khác nhau, mỗi ngón kéo theo chiều riêng nên hai lớp có thể xoay ngược nhau (ví dụ `L R`), chuyển động cùng lúc; lịch sử ghi hai nước trong một lượt và Hoàn tác/Làm lại một lần cho cả lượt. Hai ngón cùng một lớp, khác trục, ở ngoài khối hoặc một ngón không kéo thì không xoay và có gợi ý. Đặt ngón tô sáng viên đang chạm, kéo rõ hướng thì tô sáng cả hàng/cột. Bản lưu lên phiên bản 3, vẫn đọc bản cũ.
 - **Chơi tự do toàn màn hình, điều khiển 1/2/3 ngón**: chọn tab sẽ mở sân chơi phủ kín màn hình và tự yêu cầu toàn màn hình; bị từ chối/không hỗ trợ thì vẫn phủ kín trang, có nút thử lại, thoát toàn màn hình và **Quay lại** về tab trước. 1 ngón xoay một lớp, kể cả lớp giữa `M/E/S`; 2 ngón xoay lớp ngoài cùng lớp giữa kề nó (`Rw`, `Uw`…) thành một nước; 3 ngón chỉ đổi góc nhìn. Tô sáng lớp đang kéo; thêm ngón sau khi đã khóa hướng, nhấc từng ngón, ngón lệch hướng, 4 ngón hoặc ngắt chạm đều không tạo nước sai. Chuột theo chế độ 1 lớp/2 lớp/Góc nhìn; nút chọn lớp có thêm `M/E/S`; công thức và phím tắt nhận `M E S`, `Rw` và chữ thường `r`. Khối nhận biết đã giải ở mọi hướng cầm; bản lưu mới `rubik-play-v2` tự chuyển từ bản cũ và giữ bản cũ làm bản phục hồi.
 - **Tab Chơi tự do**: xoay Rubik ảo bằng vuốt hàng/cột ngoài, nút xoay hoặc bàn phím; kéo ô tâm/nền để đổi góc nhìn. Có hoàn tác/làm lại, tráo khối, chạy/dừng công thức nhập tay và tự lưu khối cùng lịch sử. Khối tự chơi độc lập với khối đang chụp, lời giải và mẫu bài học.
 - **Tab Học chơi riêng**: 15 bài từ cách cầm khối, đọc ký hiệu, giải cơ bản 7 bước đến kết hợp công thức, F2L (hai tầng đầu), OLL (định hướng tầng cuối) và PLL (hoán vị tầng cuối). Có 19 công thức/mẫu với điều kiện áp dụng, chia cụm để ghi nhớ, mô phỏng 3D độc lập, tiến/lùi, tự chạy/dừng, chọn tốc độ và lưu tiến độ học trên trình duyệt. Hỗ trợ màn hình điện thoại và đổi tab bằng bàn phím.
@@ -25,6 +26,8 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ### Sửa lỗi
 
+- Rubik 3D: sau khi xoay, vài ô có thể hiện màu đen trên iPhone cho tới khi xoay tiếp hoặc đổi góc nhìn. Ô màu giờ vẽ thẳng trên mặt viên (không lồng phần tử con) và khối được dựng lại sau mỗi lượt xoay. Đã kiểm tra trên Chrome; chưa xác nhận trên iPhone.
+- Lớp đang chọn trong bảng Điều khiển che mất tô sáng của viên nằm ở chỗ giao với lớp đang kéo.
 - Có ảnh chụp trùng chưa xử lý thì huỷ lời giải cũ, kể cả khi màu các ô không đổi.
 - Chụp lại một mặt không làm mất các ô đã sửa tay ở mặt khác (ô sửa tay đi cùng ảnh khi app ghép/xoay).
 - Chụp thiếu mặt rồi tô tay mặt còn lại: khi app xoay cả khối, cờ "đã chụp" đi cùng ảnh; trước đây chụp nốt mặt cuối làm lỗi JS và mất ảnh.

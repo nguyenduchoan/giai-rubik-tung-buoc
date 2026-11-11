@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261111play2">
+  <link rel="stylesheet" href="css/style.css?v=20261111play3">
 </head>
 <body>
   <header class="app-header">
@@ -273,12 +273,12 @@
         </div>
         <div class="play-body">
           <div class="play-stage">
-            <div id="play-cube" class="cube3d-container" role="group" aria-label="Rubik tương tác: 1 ngón xoay một lớp, 2 ngón xoay hai lớp, 3 ngón đổi góc nhìn. Dùng bảng Điều khiển để xoay bằng nút."></div>
+            <div id="play-cube" class="cube3d-container" role="group" aria-label="Rubik tương tác: 1 ngón kéo một hàng hoặc cột, 2 ngón kéo hai hàng hoặc hai cột song song, mỗi ngón một chiều, 3 ngón đổi góc nhìn. Dùng bảng Điều khiển để xoay bằng nút."></div>
             <div class="play-stage-top">
               <p id="play-status" class="play-status" role="status" aria-live="polite"></p>
             </div>
             <div class="play-stage-bottom">
-              <p class="play-gesture-hint">1 ngón: một lớp · 2 ngón: hai lớp · 3 ngón: nhìn quanh</p>
+              <p class="play-gesture-hint">1 ngón: một hàng/cột · 2 ngón: hai hàng/cột, mỗi ngón một chiều · 3 ngón: nhìn quanh</p>
               <p id="play-screen-note" class="play-screen-note" role="status"></p>
             </div>
           </div>
@@ -293,7 +293,7 @@
               <label><input type="radio" name="play-mode" value="layer2"> 2 lớp</label>
               <label><input type="radio" name="play-mode" value="view"> Góc nhìn</label>
             </fieldset>
-            <p class="muted small">Trên màn hình cảm ứng, số ngón quyết định: 1 ngón xoay một lớp (kể cả lớp giữa), 2 ngón xoay lớp ngoài cùng lớp giữa kề nó, 3 ngón đổi góc nhìn. Một ngón kéo ở vùng nền cũng đổi góc nhìn.</p>
+            <p class="muted small">Trên màn hình cảm ứng, số ngón quyết định: 1 ngón kéo một hàng hoặc cột (kể cả lớp giữa); 2 ngón đặt lên hai hàng hoặc hai cột song song, mỗi ngón kéo theo chiều riêng nên hai lớp có thể xoay ngược nhau, lượt này ghi hai nước và hoàn tác một lần; chỉ 3 ngón mới đổi góc nhìn. Chuột kéo vùng nền để nhìn quanh.</p>
             <h3>Chọn lớp cần xoay</h3>
             <div id="play-faces" class="play-faces" role="group" aria-label="Chọn lớp Rubik"></div>
             <p id="play-face-name" class="play-face-name"></p>
@@ -335,16 +335,16 @@
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261111play2"></script>
-  <script src="js/play-moves.js?v=20261111play2"></script>
-  <script src="js/play-gesture.js?v=20261111play2"></script>
-  <script src="js/solver.js?v=20261111play2"></script>
-  <script src="js/vision.js?v=20261111play2"></script>
-  <script src="js/cube3d.js?v=20261111play2"></script>
-  <script src="js/lessons.js?v=20261111play2"></script>
-  <script src="js/learn.js?v=20261111play2"></script>
-  <script src="js/play-state.js?v=20261111play2"></script>
-  <script src="js/play.js?v=20261111play2"></script>
-  <script src="js/app.js?v=20261111play2"></script>
+  <script src="js/cube.js?v=20261111play3"></script>
+  <script src="js/play-moves.js?v=20261111play3"></script>
+  <script src="js/play-gesture.js?v=20261111play3"></script>
+  <script src="js/solver.js?v=20261111play3"></script>
+  <script src="js/vision.js?v=20261111play3"></script>
+  <script src="js/cube3d.js?v=20261111play3"></script>
+  <script src="js/lessons.js?v=20261111play3"></script>
+  <script src="js/learn.js?v=20261111play3"></script>
+  <script src="js/play-state.js?v=20261111play3"></script>
+  <script src="js/play.js?v=20261111play3"></script>
+  <script src="js/app.js?v=20261111play3"></script>
 </body>
 </html>
