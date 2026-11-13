@@ -260,6 +260,12 @@
     ));
   }
 
+  // Màn chụp mặt kế tiếp không tiếp tục hiển thị/chốt lại mặt vừa lưu. Chọn ảnh đã lưu để chụp lại.
+  function waitingForNextFace() {
+    if (cam.mode !== 'camera' || cam.preview || !cam.live || state.reshoot || state.scanned[currentFace()]) return null;
+    return SCAN_ORDER.find((f) => state.scanned[f] && centerOf(f) === cam.live[4]) || null;
+  }
+
   // Làm mượt RGB theo thời gian khi khối giữ yên và chống nhảy màu 1 khung hình (hysteresis).
   function updateLiveSample(now, detail) {
     const uniform = detail.spread.every((sp) => sp <= AUTO.maxSpread);
@@ -302,9 +308,10 @@
   }
 
   // Khi người dùng đưa ngón tay bấm nút Chụp/Xác nhận, điện thoại thường hơi nghiêng trong vài trăm ms cuối.
-  // Ưu tiên lấy mẫu ổn định ngay trước đó để màu chụp được luôn khớp với màu người dùng vừa nhìn thấy.
+  // Chỉ dùng mẫu ổn định nếu còn khớp cả 9 ô đang hiển thị; xoay sang mặt mới không được lấy lại mặt cũ.
   function pickBestLiveSnap(now = performance.now()) {
-    if (cam.lastStable && now - cam.lastStable.time <= 900) {
+    if (cam.lastStable && now - cam.lastStable.time <= 900 &&
+        cam.live && cam.lastStable.colors.every((color, k) => color === cam.live[k])) {
       return {
         rgb: cam.lastStable.rgb.map((c) => c.slice()),
         colors: cam.lastStable.colors.slice(),
@@ -402,12 +409,15 @@
         canvas.height = frame.height;
       }
       ctx.drawImage(frame, 0, 0);
-      if (!cam.preview && now - cam.lastSample > AUTO.sampleMs) {
+      // Không để nhận diện/tự chụp đổi nội dung và đẩy nút đi chỗ khác giữa lúc nhấn và nhả tay.
+      if (!cam.preview && !cam.lockedSnap && now - cam.lastSample > AUTO.sampleMs) {
         cam.lastSample = now;
         const { x, y, s } = gridRect();
         const detail = V.sampleGridDetailed(frameCtx, x, y, s);
         const { uniform, motion } = updateLiveSample(now, detail);
-        if (!state.scanned[currentFace()] || state.reshoot) renderMiniFace($('#current-preview'), cam.live);
+        if (!state.scanned[currentFace()] || state.reshoot) {
+          renderMiniFace($('#current-preview'), waitingForNextFace() ? null : cam.live);
+        }
         renderPreviewBox();
         autoCaptureTick(now, detail, { uniform, motion });
       }
@@ -756,14 +766,8 @@
     state.scanned[face] = true;
     state.needsClassify = true;
     state.reshoot = false;
-    cam.preview = null;
-    cam.lockedSnap = null;
+    resetLiveBuffers();
     cam.cooldownUntil = performance.now() + AUTO.cooldownMs;
-    cam.prevRawRgb = null;
-    cam.smoothRgb = null;
-    cam.lastStable = null;
-    cam.stableSince = 0;
-    cam.progress = 0;
     flashFeedback();
     if (cam.mode === 'image') {
       setMode(null);
@@ -795,15 +799,28 @@
       toast(`Đã xác nhận mặt tâm ${colorName(colors[4])} (${count}/6 mặt). Xoay sang một mặt chưa chụp.`, 2200);
     }
     renderScanGuide();
+    // Mỗi lần xác nhận là chốt màu, không yêu cầu đúng chiều; mở ngay khung chụp của mặt kế tiếp.
+    const heading = $('#scan-title');
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start', behavior: 'auto' });
   }
 
-  function lockLiveSnapOnPress() {
+  function lockLiveSnapOnPress(e) {
+    if (!e.isPrimary || e.button !== 0) return;
     if (cam.mode === 'camera' && !cam.preview) {
       cam.lockedSnap = pickBestLiveSnap(performance.now());
     }
   }
   $('#btn-capture').addEventListener('pointerdown', lockLiveSnapOnPress);
   $('#btn-confirm-face').addEventListener('pointerdown', lockLiveSnapOnPress);
+  document.addEventListener('pointerup', (e) => {
+    if (!e.isPrimary || !cam.lockedSnap) return;
+    const snap = cam.lockedSnap;
+    // click dùng mẫu đã chốt trước; nếu nhả ngoài nút và không có click thì vẫn mở lại nhận diện.
+    setTimeout(() => { if (cam.lockedSnap === snap) cam.lockedSnap = null; }, 0);
+  });
+  document.addEventListener('pointercancel', (e) => { if (e.isPrimary) cam.lockedSnap = null; });
+  window.addEventListener('blur', () => { cam.lockedSnap = null; });
 
   $('#btn-capture').addEventListener('click', () => {
     if (!cam.mode) return;
@@ -918,7 +935,16 @@
       colors = cam.live;
       interactive = !!cam.live;
       box.classList.remove('is-preview');
-      if (cam.live) {
+      const waiting = waitingForNextFace();
+      if (waiting) {
+        colors = null;
+        interactive = false;
+        title.textContent = `Ảnh ${idx}/6 · Mặt tiếp theo`;
+        hint.innerHTML = `Đã lưu màu mặt tâm <b>${colorName(centerOf(waiting))}</b>. ` +
+          'Xoay sang một mặt chưa chụp, chiều nào cũng được. Muốn chụp lại thì chọn ảnh đã lưu trong danh sách; cần sửa màu thì bấm “Chụp mặt này”.';
+        btnConfirm.disabled = true;
+        btnConfirm.textContent = '✅ Xác nhận màu';
+      } else if (cam.live) {
         const sameCenter = SCAN_ORDER.find((f) => state.scanned[f] && centerOf(f) === colors[4]);
         const targetIdx = sameCenter ? SCAN_ORDER.indexOf(sameCenter) + 1 : idx;
         const dup = duplicateFace(cam.liveRgb, colors[4]);
@@ -933,8 +959,10 @@
         btnConfirm.disabled = false;
         btnConfirm.textContent = sameCenter ? `✅ Cập nhật mặt tâm ${colorName(colors[4])}` : '✅ Xác nhận màu';
       } else {
-        title.innerHTML = `Đang chờ nhận diện Ảnh ${idx}/6…`;
-        hint.innerHTML = 'Đặt mặt Rubik vào vừa khít khung 3×3 trên camera.';
+        const next = !state.reshoot && SCAN_ORDER.some((f) => state.scanned[f]) && !state.scanned[face];
+        title.textContent = next ? `Ảnh ${idx}/6 · Mặt tiếp theo` : `Đang chờ nhận diện Ảnh ${idx}/6…`;
+        hint.textContent = next ? 'Đã lưu màu mặt trước. Đưa một mặt chưa chụp vào khung 3×3; không cần đúng chiều.'
+          : 'Đặt mặt Rubik vào vừa khít khung 3×3 trên camera.';
         btnConfirm.disabled = true;
         btnConfirm.textContent = '✅ Xác nhận màu';
       }
@@ -984,7 +1012,8 @@
   function renderScanGuide() {
     const face = currentFace();
     const count = SCAN_ORDER.filter((f) => state.scanned[f]).length;
-    $('#scan-title').textContent = `Ảnh ${state.scanIndex + 1}/6`;
+    $('#scan-title').textContent = `Ảnh ${state.scanIndex + 1}/6` +
+      (state.reshoot ? ' · Chụp lại' : count > 0 && !state.scanned[face] ? ' · Mặt tiếp theo' : '');
     $('#edge-top').hidden = true;
     $('#edge-bottom').hidden = true;
     $('#scan-instruction').innerHTML = scanInstruction();
@@ -993,7 +1022,8 @@
       ? `Xem trước: <b>ảnh ${state.scanIndex + 1}</b> · chờ xác nhận màu (đã có ${count}/6 mặt)`
       : `Đang chụp: <b>ảnh ${state.scanIndex + 1}</b> · đã có ${count}/6 mặt`;
     const previewColors = cam.preview ? cam.preview.colors
-      : (state.scanned[face] && !state.reshoot ? faceColors(face) : cam.live || (state.scanned[face] ? faceColors(face) : null));
+      : waitingForNextFace() ? null
+        : (state.scanned[face] && !state.reshoot ? faceColors(face) : cam.live || (state.scanned[face] ? faceColors(face) : null));
     renderMiniFace($('#current-preview'), previewColors);
     renderPreviewBox();
 

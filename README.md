@@ -19,7 +19,7 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
 
 1. **Chụp các mặt**: mở trên điện thoại, app tự hỏi quyền camera. Đưa từng mặt vào khung 3×3:
    - App nhận diện và làm mượt 9 ô màu theo thời gian thực ngay bên dưới camera. Khi thấy màu đã nhận đúng, bạn có thể bấm **✅ Xác nhận màu** ngay, hoặc bấm **📸 Chụp mặt này** để dừng hình và mở khung **Xem trước màu vừa chụp** (có thể chạm trực tiếp vào từng ô trên ảnh camera, khung xem trước hoặc hình mặt bên phải để sửa màu, xoay 90°, rồi bấm **✅ Xác nhận màu mặt này** / **🔄 Chụp lại**).
-   - **Xác nhận theo màu tâm**: nếu bạn bấm xác nhận nhiều lần trên cùng một tâm để lấy ảnh chuẩn nhất, app chỉ cập nhật ảnh cuối cùng vào đúng tâm đó, không tạo thêm ảnh trùng tâm và không làm mất lượt chụp của các mặt còn lại.
+   - **Xác nhận màu rồi sang mặt kế tiếp**: nút xác nhận chỉ chốt 9 ô màu, không yêu cầu đúng chiều cầm. App lưu xong sẽ mở ngay màn chụp ảnh tiếp theo, xóa màu xem trước của mặt vừa lưu và chờ bạn xoay sang mặt chưa chụp. Đủ 6 mặt mới tự ghép/xoay và sang kiểm tra. Muốn sửa/chụp lại, chọn ảnh đã lưu trong danh sách; ảnh mới cùng tâm sẽ cập nhật đúng mặt đó, không tạo mặt trùng.
    - Chốt mẫu màu ổn định ngay trước thao tác chạm nút để tránh rung tay làm nhảy màu khi bấm chụp.
    - Tùy chọn **🎥 Tự chụp khi giữ yên** (mặc định tắt) giúp tự dừng hình vào khung xem trước khi giữ yên khối Rubik khoảng 1 giây. Vẫn hỗ trợ "Chụp bằng app camera" và "Chọn ảnh có sẵn".
 2. **Kiểm tra màu**:
@@ -108,6 +108,7 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | --- | --- |
 | `node tests/solver.test.js` | Bước xoay, kiểm tra hợp lệ (gồm mọi cách đổi 2 ô), giải 40 trạng thái ngẫu nhiên |
 | `node tests/vision.test.js` | Nhận màu dưới ánh sáng/nhiễu mô phỏng, phát hiện chụp trùng mặt |
+| `node tests/e2e-confirm.js` | Chạm xác nhận/chụp ngay khi vừa thấy màu mặt mới: lưu đúng 9 ô, mở ngay màn mặt tiếp theo và xóa xem trước cũ, hủy chạm, camera đổi màu khi đang giữ nút, chụp lại cùng tâm, giữ màu sửa tay và đủ 6 mặt thì sang kiểm tra |
 | `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
 | `node tests/lessons.test.js` | Tác dụng và điều kiện khối mẫu của từng công thức, bảo toàn các phần đã giải, kiểm tra hướng góc và hoán vị cạnh |

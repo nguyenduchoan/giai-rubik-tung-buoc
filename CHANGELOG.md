@@ -27,6 +27,7 @@ Mọi thay đổi đáng chú ý của dự án được ghi ở đây. Định 
 
 ### Sửa lỗi
 
+- Xác nhận chỉ chốt 9 ô màu, không yêu cầu đúng chiều cầm; lưu xong mở ngay màn chụp mặt tiếp theo, xóa màu xem trước cũ. Đủ 6 mặt mới tự ghép/xoay và sang kiểm tra; chụp lại bằng cách chọn ảnh đã lưu. Không còn lấy nhầm mẫu ổn định của mặt cũ khiến tiến độ không tăng. Trong lúc nhấn nút Chụp/Xác nhận, nhận diện và tự chụp tạm chờ để nút không dịch chuyển làm mất lần bấm; hủy chạm thì nhận diện tiếp tục. Màu sửa tay được ưu tiên. Bổ sung kiểm thử bằng thao tác chạm thật trên trình duyệt giả lập điện thoại.
 - Rubik 3D: sau khi xoay, vài ô có thể hiện màu đen trên iPhone cho tới khi xoay tiếp hoặc đổi góc nhìn. Ô màu giờ vẽ thẳng trên mặt viên (không lồng phần tử con) và khối được dựng lại sau mỗi lượt xoay. Đã kiểm tra trên Chrome; chưa xác nhận trên iPhone.
 - Lớp đang chọn trong bảng Điều khiển che mất tô sáng của viên nằm ở chỗ giao với lớp đang kéo.
 - Có ảnh chụp trùng chưa xử lý thì huỷ lời giải cũ, kể cả khi màu các ô không đổi.

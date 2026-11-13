@@ -87,6 +87,7 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
 .slider-row input { flex: 1; }
 
 /* ---------- Chụp ---------- */
+#scan-title { scroll-margin-top: 100px; }
 .scan-layout, .solve-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
