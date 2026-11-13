@@ -599,3 +599,54 @@ html.play-open, html.play-open body { overflow: hidden; overscroll-behavior: non
   .play-gesture { order: 10; flex-basis: 100%; padding: 2px 0 0; }
   .play-gesture-hint { font-size: 0.8rem; }
 }
+
+/* ---------- Phòng giao hữu ---------- */
+.room-entry { max-width: 580px; margin: 0 auto; }
+.room-entry form > label, .room-join > label { display: block; margin: 14px 0 7px; font-weight: 600; }
+.room-entry input { width: 100%; min-width: 0; padding: 12px; color: var(--text); background: var(--bg); border: 1px solid #34416a; border-radius: 8px; font: inherit; }
+#room-create { width: 100%; margin-top: 14px; }
+.room-join { margin-top: 22px; padding-top: 4px; border-top: 1px solid #34416a; }
+.room-join .row { gap: 8px; align-items: stretch; }
+.room-join input { flex: 1; width: 0; text-transform: uppercase; letter-spacing: 2px; }
+.room-join .btn { flex: none; }
+#room-resume { margin-top: 16px; }
+.room-error { color: #ffb1b1; overflow-wrap: anywhere; }
+.room-error:empty, #room-storage-note:empty { display: none; }
+.room-heading, .room-game-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.room-heading h2 { margin: 0; letter-spacing: 5px; color: #b9d0ff; font: 700 2rem ui-monospace, monospace; }
+.room-heading > p { flex-basis: 100%; margin: 0; }
+.room-heading .learn-eyebrow { margin: 0 0 6px; }
+.room-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; align-items: start; }
+.room-layout > * { min-width: 0; }
+.room-game { text-align: center; }
+.room-game-head { text-align: left; }
+.room-game-head h3 { margin: 0; }
+.room-stats { display: flex; gap: 30px; justify-content: center; padding-top: 16px; }
+.room-stats span { display: block; color: var(--muted); font-size: 0.85rem; }
+.room-stats strong { font: 600 clamp(1.5rem, 6vw, 2.2rem) ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.room-status { min-height: 2.8em; margin: 12px 0 0; font-size: 0.9rem; }
+#room-cube { height: clamp(265px, 43vh, 420px); margin: 0; touch-action: none; }
+#room-cube.gesturing .cubie.active-layer:not(.preview-layer):not(.touch-cubie) .sticker { box-shadow: inset 0 0 0 3px #111; }
+.room-controls { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.room-controls label { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+.room-controls select { max-width: 150px; padding: 9px 5px; color: var(--text); background: var(--bg); border: 1px solid #34416a; border-radius: 7px; font: inherit; }
+.room-turns { flex-basis: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.room-turns .btn { padding: 10px 4px; justify-content: center; }
+.room-help { margin-bottom: 0; line-height: 1.5; }
+.room-table-wrap { overflow-x: auto; }
+.room-table { border-collapse: collapse; width: 100%; text-align: left; font-variant-numeric: tabular-nums; }
+.room-table th, .room-table td { padding: 13px 8px; border-bottom: 1px solid #34416a; }
+.room-table th { color: var(--muted); font-size: 0.8rem; }
+.room-table td:first-child { overflow-wrap: anywhere; max-width: 180px; }
+.room-table td:not(:first-child) { white-space: nowrap; font-size: 0.9rem; }
+.room-own-result { background: #233e6d66; }
+.room-game:fullscreen { box-sizing: border-box; border: 0; border-radius: 0; width: 100%; height: 100%; overflow: auto; display: flex; flex-direction: column; background: var(--bg); }
+.room-game:fullscreen #room-cube { flex: 1; min-height: 160px; }
+.room-game:fullscreen .room-controls { margin-top: 0; }
+#tab-rooms :focus-visible { outline: 3px solid #9dbbff; outline-offset: 3px; }
+@media (max-width: 760px) { .room-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) {
+  .tabs .tab[data-tab="play"], .tabs .tab[data-tab="rooms"] { flex-basis: calc(50% - 6px); }
+  .room-layout { gap: 12px; }
+  .room-table th, .room-table td { padding: 11px 5px; }
+}

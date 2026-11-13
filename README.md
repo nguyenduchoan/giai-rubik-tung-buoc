@@ -5,7 +5,7 @@
 
 Web giải khối Rubik 3×3 cho người mới: **chụp 6 mặt bằng camera điện thoại → app tự nhận màu, tự ghép và xoay các ảnh cho khớp → hướng dẫn giải từng bước bằng mô phỏng 3D**, toàn bộ bằng tiếng Việt.
 
-Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build, không phụ thuộc thư viện ngoài, không gửi ảnh lên máy chủ**. Mọi xử lý đều chạy trong trình duyệt.
+Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, không phụ thuộc thư viện ngoài, không gửi ảnh lên máy chủ**. Nhận màu, giải và mô phỏng chạy trong trình duyệt; phòng thi đấu dùng thêm máy chủ Node.js để chia sẻ đề và lưu kết quả.
 
 > **English:** A zero-dependency, client-side web app that scans a 3×3 Rubik's cube with the phone camera, auto-detects colors, fixes faces captured in the wrong order/orientation, solves it with Kociemba's two-phase algorithm and walks you through each move with a 3D animation. UI and docs are in Vietnamese.
 
@@ -37,14 +37,16 @@ Trang web tĩnh viết bằng HTML/CSS/JavaScript thuần: **không cần build,
 
    Khi khối chưa giải, dưới khối có nút **💡 Hướng dẫn giải**: bấm vào sẽ mang nguyên khối đang chơi (đúng màu, đúng hướng cầm, kể cả khi lớp giữa/hai lớp đã làm tâm đổi chỗ) sang tab **3. Hướng dẫn giải**, tự tính lời giải và hướng dẫn từng bước. Khối đang chơi không bị đổi; khối mang sang thay cho màu ở bước 2 (nếu đã có ảnh chụp thì app hỏi trước).
 
+6. **Phòng thi đấu**: nhập biệt danh để tạo phòng hoặc vào bằng mã mời 6 ký tự, không cần tài khoản. Mỗi phòng có một khối tráo chung; mỗi người bấm Bắt đầu rồi tự giải, đồng hồ chạy từ nước xoay đầu tiên. Giải xong tự lưu thời gian và số bước vào bảng chung, có Gửi lại khi lỗi mạng; kết quả đã lưu còn sau khi mở lại trang hoặc khởi động lại máy chủ. Một người có một kết quả/phòng, muốn thi lượt mới thì tạo phòng mới. Một nước 180° hoặc hai lớp `Rw` tính một bước; hai ngón xoay hai lớp độc lập tính hai bước. Kết quả giao hữu do trình duyệt tự báo, chấp nhận có thể bị giả; chưa có đồng bộ bắt đầu hay chống gian lận. Phần này cần chạy `npm start` hoặc dịch vụ phòng trên Hub.
+
 ## Chạy trên máy
 
-Cần một máy chủ tĩnh bất kỳ, ví dụ:
+Dùng Node.js để có đủ các tính năng, bao gồm phòng thi đấu:
 
 ```bash
 npm start                      # = node scripts/serve.js, mở http://127.0.0.1:8000/
-# hoặc
-python3 -m http.server 8000
+# Chỉ dùng tính năng không có phòng thì có thể chạy máy chủ tĩnh khác:
+python3 -m http.server 8000     # không hỗ trợ tạo/vào phòng hoặc lưu kết quả chung
 ```
 
 - Trình duyệt chỉ cho dùng **camera trực tiếp** khi trang mở qua `https://` hoặc `localhost`.
@@ -93,6 +95,8 @@ Mẹo: chụp nơi đủ sáng, tránh lóa, đặt mặt Rubik vừa khít khun
 | `js/play-moves.js` | Ký hiệu và phép xoay của Chơi tự do: lớp ngoài, lớp giữa `M/E/S`, hai lớp `Rw/Uw…` |
 | `js/play-gesture.js` | Bộ nhận cử chỉ 1/2/3 ngón (không dùng DOM): ghép ngón, đo từng ngón, tô viên đang chạm, hai lớp song song mỗi ngón một chiều, hủy, chốt lượt |
 | `js/play-state.js`, `js/play.js` | Trạng thái khối tự chơi, lịch sử hoàn tác/làm lại, lưu khối; sân chơi toàn màn hình, nút, bàn phím và công thức |
+| `js/room-attempt.js`, `js/rooms.js` | Lượt giải có bộ đếm riêng; tạo/vào phòng, đồng hồ, gửi kết quả và bảng so sánh |
+| `scripts/rooms.js`, `scripts/serve.js` | API phòng (giao diện gọi máy chủ), lưu tệp dữ liệu và phục vụ trang khi chạy bằng Node |
 | `tests/` | Kiểm thử Node và kiểm thử trình duyệt (camera giả) |
 | `test-images/` | 6 ảnh mặt mẫu để thử thủ công |
 | `scripts/` | Máy chủ tĩnh, chạy kiểm thử trình duyệt, script triển khai |
@@ -110,6 +114,8 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | `node tests/vision.test.js` | Nhận màu dưới ánh sáng/nhiễu mô phỏng, phát hiện chụp trùng mặt |
 | `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
+| `node tests/rooms.test.js` | Bộ đếm vượt 200 lượt, hai nước/lượt, đồng hồ; cùng đề, ghi đồng thời, gửi lại, lỗi ghi và dữ liệu qua khởi động lại |
+| `node tests/e2e-rooms.js` | Hai trình duyệt riêng tạo/vào và giải, mất mạng rồi gửi lại, bảo toàn khối tự chơi, mở lại kết quả và bố cục 320–390 px; chạy dưới `/rubik/` qua tuyến API Hub |
 | `node tests/lessons.test.js` | Tác dụng và điều kiện khối mẫu của từng công thức, bảo toàn các phần đã giải, kiểm tra hướng góc và hoán vị cạnh |
 | `node tests/e2e-learn.js` | Tab học: tiến/lùi, tự chạy/dừng, đổi bài/công thức giữa hoạt ảnh, giữ nguyên lời giải thật, lưu tiến độ, lưu trữ bị chặn và bố cục điện thoại |
 | `node tests/play.test.js` | 45 kiểu nước đối chiếu phép biến đổi độc lập (`Rw = R M'`, `M' = L R' x`…), lượt hai lớp song song và hoàn tác cả lượt, lịch sử/lưu/chuyển bản lưu cũ, từ chối ảnh gương, suy ra lớp/chiều từ hướng vuốt và các ca của bộ nhận cử chỉ (tô viên/lớp, hai ngón ngược chiều, cùng lớp, khác trục, ngón ngoài khối, ghép/thêm/nhấc ngón, 4 ngón, hủy) |
@@ -125,11 +131,14 @@ CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm ru
 
 ## Triển khai
 
-Chỉ cần chép `index.html`, `css/` và `js/` lên bất kỳ dịch vụ web tĩnh nào có **HTTPS** (GitHub Pages, Netlify, Cloudflare Pages, nginx…). Không cần cấu hình gì thêm.
+Các tính năng chụp/giải/học/Chơi tự do chỉ cần chép `index.html`, `css/` và `js/` lên dịch vụ web tĩnh có **HTTPS**. Phòng thi đấu cần thêm dịch vụ Node để các máy chia sẻ phòng và lưu kết quả.
+
+`npm start` phục vụ cả trang và API phòng tại `/api/`; dữ liệu mặc định nằm trong `.local/room-data/rooms.json`. Đặt `ROOM_DATA_DIR` để chọn thư mục riêng, giữ lại thư mục này qua các lần phát hành và chỉ chạy một tiến trình ghi. Không đưa thư mục dữ liệu vào vùng phục vụ tệp công khai. Máy chủ không tự xóa phòng; sao lưu tệp dữ liệu khi dịch vụ đã dừng.
 
 - Nếu máy chủ cache JS/CSS lâu, hãy đổi tham số `?v=` trong `index.html` và `js/app.js` mỗi lần phát hành để điện thoại không dùng bản cũ.
 - Tab đã mở sẵn sẽ tự phát hiện bản mới khi người dùng quay lại tab: tự tải lại nếu chưa chụp/giải gì, nếu đang dở thì hiện nút **↻ Tải lại**.
-- `scripts/deploy-hub.sh` là script triển khai lên một "Server Hub" tự dựng (chạy test, đặt `?v=` theo nội dung, tráo bản mới vào `$HUB_ROOT/rubik`). Có thể tham khảo khi viết script cho máy chủ của bạn.
+- `scripts/deploy-hub.sh` triển khai lên Server Hub: chạy kiểm thử, cài dịch vụ `rubik-rooms` bằng PM2 (công cụ giữ tiến trình chạy nền) trên `127.0.0.1:3002`, lưu dữ liệu dưới `$HUB_ROOT/data/rubik-rooms`, rồi đặt phiên bản tài nguyên và chép giao diện vào `/rubik/`. Dịch vụ được lưu trong cấu hình PM2 để chạy lại khi máy khởi động.
+- Hub chuyển `/api/rubik/` tới dịch vụ phòng thông qua bộ chuyển tiếp nhỏ gắn trước phần đọc dữ liệu của API Hub; không cần sửa nginx. Tệp HTML trên Hub được thêm `rubik-api-base=/api/rubik/`; chạy riêng vẫn dùng API tương đối. Bộ cài giữ bản mã API Hub trước thay đổi tại `data/rubik-room-service/hub-app.before-rubik.js` và kiểm thử API Hub trước khi khởi động lại.
 
 ## Đóng góp
 

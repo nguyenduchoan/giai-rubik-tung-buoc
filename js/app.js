@@ -75,7 +75,7 @@
   let wakeLock = null;
   let wakeSyncing = false;
   const wantAwake = () => document.visibilityState === 'visible' &&
-    (cam.mode === 'camera' || ['solve', 'learn', 'play'].includes(activeTab()));
+    (cam.mode === 'camera' || ['solve', 'learn', 'play', 'rooms'].includes(activeTab()));
   async function updateWakeLock() {
     if (wakeSyncing || !navigator.wakeLock) return;
     wakeSyncing = true;
@@ -124,6 +124,7 @@
     if (name === 'solve') renderSolve();
     window.Rubik.learn.setActive(name === 'learn');
     window.Rubik.play.setActive(name === 'play', { requestFullscreen: fromUser });
+    window.Rubik.rooms.setActive(name === 'rooms');
     updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1542,7 +1543,7 @@
   }
 
   try {
-    const w = new Worker('js/solver-worker.js?v=20261111solve1');
+    const w = new Worker('js/solver-worker.js?v=20261113rooms1');
     w.onmessage = (e) => {
       const p = solverWorker.pending.get(e.data.id);
       if (!p) return;
@@ -1885,7 +1886,7 @@
     } catch (e) { return; }
     if (!latest || latest === APP_VERSION) return;
     // Chỉ tự tải lại khi trang còn nguyên như lúc mở: chưa chụp, chưa tô/sửa màu, chưa giải.
-    const pristine = !['learn', 'play'].includes(activeTab()) && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
+    const pristine = !['learn', 'play', 'rooms'].includes(activeTab()) && !window.Rubik.rooms.inProgress && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
       state.colors.every((c, i) => c === INITIAL_COLORS[i]);
     if (pristine) { location.reload(); return; }
     $('#update-banner').hidden = false;

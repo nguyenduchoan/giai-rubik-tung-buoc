@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261111solve1">
+  <link rel="stylesheet" href="css/style.css?v=20261113rooms1">
 </head>
 <body>
   <header class="app-header">
@@ -17,6 +17,7 @@
       <button id="nav-solve" class="tab" data-tab="solve" role="tab" aria-selected="false" aria-controls="tab-solve" tabindex="-1">3. Hướng dẫn giải</button>
       <button id="nav-learn" class="tab" data-tab="learn" role="tab" aria-selected="false" aria-controls="tab-learn" tabindex="-1">📖 Học chơi</button>
       <button id="nav-play" class="tab" data-tab="play" role="tab" aria-selected="false" aria-controls="tab-play" tabindex="-1">🎮 Chơi tự do</button>
+      <button id="nav-rooms" class="tab" data-tab="rooms" role="tab" aria-selected="false" aria-controls="tab-rooms" tabindex="-1">🏁 Phòng thi đấu</button>
     </nav>
   </header>
 
@@ -331,21 +332,88 @@
         </div>
       </div>
     </section>
+    <section id="tab-rooms" class="panel" role="tabpanel" aria-labelledby="nav-rooms">
+      <div id="room-entry" class="card room-entry">
+        <p class="learn-eyebrow">CÙNG BẠN BÈ THỬ SỨC</p>
+        <h2>Phòng thi đấu Rubik</h2>
+        <p>Cùng một khối tráo, mỗi người tự bắt đầu. Giải xong để so thời gian và số bước với bạn bè.</p>
+        <form id="room-form">
+          <label for="room-nickname">Biệt danh của bạn</label>
+          <input id="room-nickname" type="text" maxlength="24" autocomplete="nickname" placeholder="Ví dụ: Hoàn" required>
+          <button id="room-create" class="btn primary" type="submit" value="create">＋ Tạo phòng mới</button>
+          <div class="room-join">
+            <label for="room-code-input">Đã có mã mời?</label>
+            <div class="row">
+              <input id="room-code-input" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Mã 6 ký tự" aria-label="Mã mời vào phòng">
+              <button id="room-join" class="btn" type="submit" value="join">Vào phòng →</button>
+            </div>
+          </div>
+        </form>
+        <button id="room-resume" class="btn" type="button" hidden></button>
+      </div>
+      <p id="room-error" class="room-error" role="alert"></p>
+      <p id="room-storage-note" class="muted small"></p>
+      <div id="room-content" hidden>
+        <div class="card room-heading">
+          <div><p class="learn-eyebrow">MÃ MỜI BẠN BÈ</p><h2 id="room-code"></h2></div>
+          <div class="row wrap">
+            <button id="room-copy" class="btn primary" type="button">Sao chép mã</button>
+            <button id="room-leave" class="btn" type="button">← Ra ngoài</button>
+          </div>
+          <p class="muted small">Mỗi phòng một đề, mỗi người một kết quả. Muốn thi lượt mới? Tạo phòng mới.</p>
+        </div>
+        <div class="room-layout">
+          <div id="room-game" class="card room-game">
+            <div class="room-game-head">
+              <span id="room-me"></span>
+              <button id="room-fullscreen" class="btn small" type="button" hidden>⛶ Toàn màn hình</button>
+            </div>
+            <div class="room-stats" aria-label="Thời gian và số bước của bạn">
+              <div><span>Thời gian</span><strong id="room-time">0:00.00</strong></div>
+              <div><span>Số bước</span><strong id="room-moves">0</strong></div>
+            </div>
+            <p id="room-status" class="room-status" role="status" aria-live="polite"></p>
+            <div id="room-cube" class="cube3d-container" role="group" aria-label="Rubik của phòng: một ngón xoay lớp, hai ngón xoay hai lớp độc lập, ba ngón đổi góc nhìn"></div>
+            <button id="room-start" class="btn primary big" type="button">▶ Bắt đầu</button>
+            <button id="room-retry" class="btn primary" type="button" hidden>↻ Gửi lại kết quả</button>
+            <div id="room-controls" class="room-controls">
+              <label>Lớp <select id="room-layer" aria-label="Lớp cần xoay"></select></label>
+              <label>Chuột <select id="room-mode"><option value="layer1">1 lớp</option><option value="layer2">2 lớp</option><option value="view">Góc nhìn</option></select></label>
+              <div class="room-turns">
+                <button id="room-clockwise" class="btn" type="button" aria-label="Xoay 90 độ">↻ 90°</button>
+                <button id="room-counterclockwise" class="btn" type="button" aria-label="Xoay ngược 90 độ">↺ 90°</button>
+                <button id="room-half" class="btn" type="button">180°</button>
+                <button id="room-view" class="btn" type="button">⟲ Góc nhìn</button>
+              </div>
+            </div>
+            <p class="muted small room-help">1 ngón xoay lớp · 2 ngón xoay hai lớp · 3 ngón đổi góc nhìn. Phím R/L/U/D/F/B/M/E/S, giữ Shift để xoay ngược.</p>
+          </div>
+          <div class="card room-results">
+            <div class="room-game-head"><h3>Kết quả trong phòng</h3><button id="room-refresh" class="btn small" type="button">↻ Làm mới</button></div>
+            <p id="room-refresh-note" class="muted small" role="status"></p>
+            <div class="room-table-wrap"><table class="room-table"><thead><tr><th scope="col">Người chơi</th><th scope="col">Thời gian</th><th scope="col">Số bước</th></tr></thead><tbody id="room-results"></tbody></table></div>
+            <p class="muted small">Kết quả giao hữu, do thiết bị của mỗi người ghi nhận.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261111solve1"></script>
-  <script src="js/play-moves.js?v=20261111solve1"></script>
-  <script src="js/play-gesture.js?v=20261111solve1"></script>
-  <script src="js/solver.js?v=20261111solve1"></script>
-  <script src="js/vision.js?v=20261111solve1"></script>
-  <script src="js/cube3d.js?v=20261111solve1"></script>
-  <script src="js/lessons.js?v=20261111solve1"></script>
-  <script src="js/learn.js?v=20261111solve1"></script>
-  <script src="js/play-state.js?v=20261111solve1"></script>
-  <script src="js/play.js?v=20261111solve1"></script>
-  <script src="js/app.js?v=20261111solve1"></script>
+  <script src="js/cube.js?v=20261113rooms1"></script>
+  <script src="js/play-moves.js?v=20261113rooms1"></script>
+  <script src="js/play-gesture.js?v=20261113rooms1"></script>
+  <script src="js/solver.js?v=20261113rooms1"></script>
+  <script src="js/vision.js?v=20261113rooms1"></script>
+  <script src="js/cube3d.js?v=20261113rooms1"></script>
+  <script src="js/lessons.js?v=20261113rooms1"></script>
+  <script src="js/learn.js?v=20261113rooms1"></script>
+  <script src="js/play-state.js?v=20261113rooms1"></script>
+  <script src="js/play.js?v=20261113rooms1"></script>
+  <script src="js/room-attempt.js?v=20261113rooms1"></script>
+  <script src="js/rooms.js?v=20261113rooms1"></script>
+  <script src="js/app.js?v=20261113rooms1"></script>
 </body>
 </html>

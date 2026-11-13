@@ -11,6 +11,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { createRoomApi } = require('./rooms.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const TYPES = {
@@ -47,8 +48,9 @@ function resolveRequest(root, url) {
   return { file };
 }
 
-const handler = (root) => async (req, res) => {
+const handler = (root, roomApi, dataDir) => async (req, res) => {
   try {
+    if (await roomApi(req, res)) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.setHeader('Allow', 'GET, HEAD');
       send(res, 405, 'Method not allowed');
@@ -65,7 +67,8 @@ const handler = (root) => async (req, res) => {
     }
     // Symlink có thể trỏ ra ngoài thư mục gốc hoặc vào file ẩn bên trong (vd. .local/): kiểm tra lại trên đường dẫn thật.
     const realRel = path.relative(root, real);
-    if (!real.startsWith(root + path.sep) || realRel.split(path.sep).some((part) => part.startsWith('.'))) {
+    if (!real.startsWith(root + path.sep) || realRel.split(path.sep).some((part) => part.startsWith('.')) ||
+        real === dataDir || real.startsWith(dataDir + path.sep)) {
       send(res, 404, 'Not found');
       return;
     }
@@ -82,7 +85,9 @@ const handler = (root) => async (req, res) => {
 };
 
 // root: thư mục phục vụ (mặc định thư mục dự án; kiểm thử dùng bản sao tạm để giả lập phiên bản mới).
-function start(port = 8000, host = '127.0.0.1', root = ROOT) {
+async function start(port = 8000, host = '127.0.0.1', root = ROOT, options = {}) {
+  const dataDir = path.resolve(options.dataDir || process.env.ROOM_DATA_DIR || path.join(root, '.local', 'room-data'));
+  const roomApi = await createRoomApi(dataDir);
   return new Promise((resolve, reject) => {
     let realRoot;
     try {
@@ -91,7 +96,7 @@ function start(port = 8000, host = '127.0.0.1', root = ROOT) {
       reject(err);
       return;
     }
-    const server = http.createServer(handler(realRoot));
+    const server = http.createServer(handler(realRoot, roomApi, dataDir));
     server.once('error', reject);
     server.listen(port, host, () => resolve(server));
   });
