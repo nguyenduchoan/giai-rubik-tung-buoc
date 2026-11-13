@@ -2,6 +2,7 @@
 /*
  * Chạy kiểm thử trình duyệt, tự bật máy chủ tĩnh:
  *   - tests/e2e-camera.js: luồng camera giả cho các kịch bản chụp MISTAKES=0,1,2,3
+ *   - tests/e2e-confirm.js: chạm xác nhận ngay khi camera vừa nhận diện mặt mới
  *   - tests/e2e-state.js: các ca trạng thái (chụp trùng, hoạt ảnh cũ, sửa tay, tự cập nhật)
  *   - tests/e2e-learn.js: lộ trình học, mô phỏng công thức và lưu tiến độ
  *   - tests/e2e-play.js: Rubik tự chơi, chuột/cảm ứng, hoàn tác và lưu khối
@@ -77,6 +78,8 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
     server.close();
   }
   if (!process.env.MISTAKES) {
+    const confirmLabel = 'Xác nhận màu bằng cảm ứng (e2e-confirm)';
+    if (!(await run(confirmLabel, [path.join(TESTS, 'e2e-confirm.js'), path.join(OUT, 'confirm')]))) failed.push(confirmLabel);
     const label = 'Ca trạng thái (e2e-state)';
     if (!(await run(label, [path.join(TESTS, 'e2e-state.js'), path.join(OUT, 'state')]))) failed.push(label);
     const learnLabel = 'Tab học chơi (e2e-learn)';

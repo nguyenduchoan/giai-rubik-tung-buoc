@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261111solve1">
+  <link rel="stylesheet" href="css/style.css?v=20261113confirm2">
 </head>
 <body>
   <header class="app-header">
@@ -30,6 +30,8 @@
     <section id="tab-scan" class="panel active" role="tabpanel" aria-labelledby="nav-scan">
       <div class="scan-layout">
         <div class="card camera-card">
+          <h2 id="scan-title" tabindex="-1">Ảnh 1/6</h2>
+          <p class="muted small">Xác nhận chỉ chốt màu 9 ô của mặt này. Chiều cầm tùy ý; app tự ghép và xoay sau khi đủ 6 mặt.</p>
           <div class="camera-wrap" id="camera-wrap">
             <canvas id="camera-canvas" width="640" height="480"></canvas>
             <div id="camera-hud" class="camera-hud" hidden></div>
@@ -82,14 +84,13 @@
         </div>
 
         <div class="card guide-card">
-          <h2 id="scan-title">Mặt TRƯỚC</h2>
+          <h2>Các mặt đã chụp</h2>
           <div class="guide-visual">
             <div class="edge-label top" id="edge-top">Cạnh trên: mặt TRÊN</div>
             <div class="mini-face" id="current-preview"></div>
             <div class="edge-label bottom" id="edge-bottom">Cạnh dưới: mặt DƯỚI</div>
           </div>
           <p id="scan-instruction" class="instruction"></p>
-          <h3>Tiến độ</h3>
           <ol id="face-list" class="face-list"></ol>
           <div class="row wrap">
             <button id="btn-to-edit" class="btn">Sang bước kiểm tra màu →</button>
@@ -346,6 +347,6 @@
   <script src="js/learn.js?v=20261111solve1"></script>
   <script src="js/play-state.js?v=20261111solve1"></script>
   <script src="js/play.js?v=20261111solve1"></script>
-  <script src="js/app.js?v=20261111solve1"></script>
+  <script src="js/app.js?v=20261113confirm2"></script>
 </body>
 </html>
