@@ -36,6 +36,42 @@ const out = path.resolve(process.argv[2] || '.e2e-out/rooms');
     throw new Error(`Hết thời gian chờ ${expression}; lỗi: ${errors.join('; ')}`);
   };
   const click = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const realClick = async (page, selector) => {
+    const point = await page.evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      element.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      const r = element.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    })()`);
+    await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', buttons: 1, clickCount: 1 });
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', buttons: 0, clickCount: 1 });
+  };
+  const checkArena = async (page) => {
+    assert(await page.evaluate(`(() => {
+      const game = document.querySelector('#room-game'), r = game.getBoundingClientRect();
+      const cube = document.querySelector('#room-cube').getBoundingClientRect();
+      return document.documentElement.classList.contains('room-open') &&
+        getComputedStyle(document.documentElement).overflowY === 'hidden' &&
+        getComputedStyle(document.body).overflowY === 'hidden' && document.querySelector('.app-header').inert &&
+        Math.abs(r.top) <= 1 && Math.abs(r.left) <= 1 && Math.abs(r.width - innerWidth) <= 1 && Math.abs(r.height - innerHeight) <= 1 &&
+        game.scrollHeight <= game.clientHeight + 1 && cube.height >= 100 &&
+        ['#room-back', '#room-fullscreen', '#room-layer', '#room-mode', '#room-half'].every(selector => {
+          const button = document.querySelector(selector), rect = button.getBoundingClientRect();
+          return rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth;
+        });
+    })()`), 'Sân phủ kín màn hình, khóa cuộn nền, khối và các nút không bị cắt');
+    const before = await page.evaluate('scrollY');
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 30, y: 180, deltaX: 0, deltaY: 400 });
+    await sleep(120);
+    assert.equal(await page.evaluate('scrollY'), before, 'Lăn chuột không kéo cả trang');
+    if (await page.evaluate('navigator.maxTouchPoints > 0')) {
+      await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 20, y: 60, id: 1 }] });
+      for (const y of [100, 160, 220]) await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 20, y, id: 1 }] });
+      await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(120);
+      assert.equal(await page.evaluate('scrollY'), before, 'Vuốt cảm ứng không kéo cả trang');
+    }
+  };
   const input = (page, selector, value) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).value = ${JSON.stringify(value)}`);
   const text = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent.trim()`);
   const open = async (page) => {
@@ -75,11 +111,29 @@ const out = path.resolve(process.argv[2] || '.e2e-out/rooms');
     await click(a, '#nav-play'); await click(a, '#play-scramble');
     const freePlay = await a.evaluate('localStorage.getItem("rubik-play-v2")');
     await click(a, '#play-back');
-    await click(a, '#room-start');
+    await realClick(a, '#room-start');
+    await wait(a, 'document.fullscreenElement === document.querySelector("#room-game")');
+    await checkArena(a);
+    assert.equal(await text(a, '#room-time'), '0:00.00', 'Mở toàn màn hình chưa chạy đồng hồ');
+    await screenshot(a, 'desktop-playing.png');
+    await realClick(a, '#room-fullscreen');
+    await wait(a, '!document.fullscreenElement');
+    await checkArena(a);
+    await realClick(a, '#room-fullscreen');
+    await wait(a, '!!document.fullscreenElement');
+    await a.evaluate('document.exitFullscreen()');
+    await wait(a, '!document.fullscreenElement');
+    await checkArena(a);
+    await realClick(a, '#room-back');
+    assert(await a.evaluate(`!document.documentElement.classList.contains('room-open') &&
+      !document.querySelector('.app-header').inert && Rubik.rooms.inProgress`));
+    await realClick(a, '#room-fullscreen');
+    await wait(a, '!!document.fullscreenElement');
     assert.equal(await text(a, '#room-moves'), '0');
     await click(a, '#room-view'); assert.equal(await text(a, '#room-moves'), '0');
     // Khi rời tab phòng mà lượt còn dở, bản cập nhật chỉ hiện banner, không tải lại trang.
     await click(a, '#nav-scan');
+    await wait(a, '!document.fullscreenElement && !document.documentElement.classList.contains("room-open")');
     await a.evaluate(`(() => {
       window.roomUpdateGuard = true;
       const fetchBefore = window.fetch, nowBefore = performance.now.bind(performance);
@@ -113,8 +167,21 @@ const out = path.resolve(process.argv[2] || '.e2e-out/rooms');
     assert(!(await (await fetch(origin + '/api/rubik/rooms/' + code)).json()).room.players[0].result);
     await a.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
     await click(a, '#room-retry'); await wait(a, 'document.querySelector("#room-status").textContent.includes("Đã lưu")');
-    await click(b, '#room-start'); await solve(b);
+    await b.evaluate(`document.querySelector('#room-game').requestFullscreen = () => Promise.reject(new Error('Bị từ chối'))`);
+    await b.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 3 });
+    await click(b, '#room-start');
+    await checkArena(b);
+    assert(await b.evaluate('!document.fullscreenElement'));
+    await screenshot(b, 'mobile-playing.png');
+    for (const [width, height] of [[320, 568], [844, 390], [568, 320], [390, 844]]) {
+      await b.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+      await sleep(120);
+      await checkArena(b);
+    }
+    await solve(b);
     await wait(b, 'document.querySelector("#room-status").textContent.includes("Đã lưu")');
+    assert(await b.evaluate(`!document.documentElement.classList.contains('room-open') && !document.querySelector('.app-header').inert`),
+      'Giải xong trở lại phòng và mở cuộn nền');
     await click(a, '#room-refresh');
     await wait(a, '[...document.querySelectorAll("#room-results tr")].every(tr => !tr.textContent.includes("Chưa có kết quả"))');
     const saved = (await (await fetch(origin + '/api/rubik/rooms/' + code)).json()).room;
@@ -134,11 +201,28 @@ const out = path.resolve(process.argv[2] || '.e2e-out/rooms');
       assert(await b.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), `Không tràn ngang ${width}px`);
     }
     await screenshot(b, 'mobile-results.png');
+    await click(b, '#room-leave');
+    await b.evaluate(`Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false })`);
+    await click(b, '#room-create'); await wait(b, '!document.querySelector("#room-content").hidden');
+    await click(b, '#room-start');
+    await checkArena(b);
+    assert(await b.evaluate('!document.fullscreenElement'));
+    await realClick(b, '#room-back');
+    assert(await b.evaluate(`Rubik.rooms.inProgress && !document.documentElement.classList.contains('room-open')`));
+    await realClick(b, '#room-fullscreen');
+    await checkArena(b);
+    await click(b, '#nav-play');
+    assert(await b.evaluate(`Rubik.play.active && document.querySelector('.app-header').inert &&
+      !document.documentElement.classList.contains('room-open')`), 'Chuyển sang Chơi tự do giữ khóa nền của sân chơi đó');
+    await click(b, '#play-back');
+    await click(b, '#room-leave');
+    assert(await b.evaluate(`!Rubik.rooms.inProgress && !document.documentElement.classList.contains('room-open') && !document.querySelector('.app-header').inert`));
     assert.deepEqual(errors, []);
+    console.log('✓ Bắt đầu tự mở toàn màn hình, không cuộn trang khi bị từ chối/không hỗ trợ, quay về phòng và kết thúc khôi phục bố cục');
     console.log('✓ Mở lại nhận diện/kết quả, bố cục 320–390 px, không có lỗi JavaScript');
   } finally {
     pages.forEach((p) => p.close());
     await new Promise((r) => front.close(r)); await new Promise((r) => backend.close(r));
-    fs.rmSync(temp, { recursive: true, force: true });
+    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -19,7 +19,7 @@ Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, kh�
 
 1. **Chụp các mặt**: mở trên điện thoại, app tự hỏi quyền camera. Đưa từng mặt vào khung 3×3:
    - App nhận diện và làm mượt 9 ô màu theo thời gian thực ngay bên dưới camera. Khi thấy màu đã nhận đúng, bạn có thể bấm **✅ Xác nhận màu** ngay, hoặc bấm **📸 Chụp mặt này** để dừng hình và mở khung **Xem trước màu vừa chụp** (có thể chạm trực tiếp vào từng ô trên ảnh camera, khung xem trước hoặc hình mặt bên phải để sửa màu, xoay 90°, rồi bấm **✅ Xác nhận màu mặt này** / **🔄 Chụp lại**).
-   - **Xác nhận theo màu tâm**: nếu bạn bấm xác nhận nhiều lần trên cùng một tâm để lấy ảnh chuẩn nhất, app chỉ cập nhật ảnh cuối cùng vào đúng tâm đó, không tạo thêm ảnh trùng tâm và không làm mất lượt chụp của các mặt còn lại.
+   - **Xác nhận màu rồi sang mặt kế tiếp**: nút xác nhận chỉ chốt 9 ô màu, không yêu cầu đúng chiều cầm. App lưu xong sẽ mở ngay màn chụp ảnh tiếp theo, xóa màu xem trước của mặt vừa lưu và chờ bạn xoay sang mặt chưa chụp. Đủ 6 mặt mới tự ghép/xoay và sang kiểm tra. Muốn sửa/chụp lại, chọn ảnh đã lưu trong danh sách; ảnh mới cùng tâm sẽ cập nhật đúng mặt đó, không tạo mặt trùng.
    - Chốt mẫu màu ổn định ngay trước thao tác chạm nút để tránh rung tay làm nhảy màu khi bấm chụp.
    - Tùy chọn **🎥 Tự chụp khi giữ yên** (mặc định tắt) giúp tự dừng hình vào khung xem trước khi giữ yên khối Rubik khoảng 1 giây. Vẫn hỗ trợ "Chụp bằng app camera" và "Chọn ảnh có sẵn".
 2. **Kiểm tra màu**:
@@ -37,7 +37,7 @@ Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, kh�
 
    Khi khối chưa giải, dưới khối có nút **💡 Hướng dẫn giải**: bấm vào sẽ mang nguyên khối đang chơi (đúng màu, đúng hướng cầm, kể cả khi lớp giữa/hai lớp đã làm tâm đổi chỗ) sang tab **3. Hướng dẫn giải**, tự tính lời giải và hướng dẫn từng bước. Khối đang chơi không bị đổi; khối mang sang thay cho màu ở bước 2 (nếu đã có ảnh chụp thì app hỏi trước).
 
-6. **Phòng thi đấu**: nhập biệt danh để tạo phòng hoặc vào bằng mã mời 6 ký tự, không cần tài khoản. Mỗi phòng có một khối tráo chung; mỗi người bấm Bắt đầu rồi tự giải, đồng hồ chạy từ nước xoay đầu tiên. Giải xong tự lưu thời gian và số bước vào bảng chung, có Gửi lại khi lỗi mạng; kết quả đã lưu còn sau khi mở lại trang hoặc khởi động lại máy chủ. Một người có một kết quả/phòng, muốn thi lượt mới thì tạo phòng mới. Một nước 180° hoặc hai lớp `Rw` tính một bước; hai ngón xoay hai lớp độc lập tính hai bước. Kết quả giao hữu do trình duyệt tự báo, chấp nhận có thể bị giả; chưa có đồng bộ bắt đầu hay chống gian lận. Phần này cần chạy `npm start` hoặc dịch vụ phòng trên Hub.
+6. **Phòng thi đấu**: nhập biệt danh để tạo phòng hoặc vào bằng mã mời 6 ký tự, không cần tài khoản. Mỗi phòng có một khối tráo chung; mỗi người bấm **Bắt đầu** để mở sân thi đấu phủ kín màn hình và khóa cuộn trang, rồi tự giải. Nếu trình duyệt cho phép thì tự vào toàn màn hình; nếu không, sân chơi vẫn phủ kín trang. Nút **Về phòng** mở lại bảng kết quả và giữ lượt đang chơi; giải xong tự về phòng. Đồng hồ chạy từ nước xoay đầu tiên. Giải xong tự lưu thời gian và số bước vào bảng chung, có Gửi lại khi lỗi mạng; kết quả đã lưu còn sau khi mở lại trang hoặc khởi động lại máy chủ. Một người có một kết quả/phòng, muốn thi lượt mới thì tạo phòng mới. Một nước 180° hoặc hai lớp `Rw` tính một bước; hai ngón xoay hai lớp độc lập tính hai bước. Kết quả giao hữu do trình duyệt tự báo, chấp nhận có thể bị giả; chưa có đồng bộ bắt đầu hay chống gian lận. Phần này cần chạy `npm start` hoặc dịch vụ phòng trên Hub.
 
 ## Chạy trên máy
 
@@ -112,6 +112,7 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | --- | --- |
 | `node tests/solver.test.js` | Bước xoay, kiểm tra hợp lệ (gồm mọi cách đổi 2 ô), giải 40 trạng thái ngẫu nhiên |
 | `node tests/vision.test.js` | Nhận màu dưới ánh sáng/nhiễu mô phỏng, phát hiện chụp trùng mặt |
+| `node tests/e2e-confirm.js` | Chạm xác nhận/chụp ngay khi vừa thấy màu mặt mới: lưu đúng 9 ô, mở ngay màn mặt tiếp theo và xóa xem trước cũ, hủy chạm, camera đổi màu khi đang giữ nút, chụp lại cùng tâm, giữ màu sửa tay và đủ 6 mặt thì sang kiểm tra |
 | `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
 | `node tests/rooms.test.js` | Bộ đếm vượt 200 lượt, hai nước/lượt, đồng hồ; cùng đề, ghi đồng thời, gửi lại, lỗi ghi và dữ liệu qua khởi động lại |

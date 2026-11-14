@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f1420">
   <title>Giải Rubik từng bước</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=20261113rooms1">
+  <link rel="stylesheet" href="css/style.css?v=20261114rooms2">
 </head>
 <body>
   <header class="app-header">
@@ -31,6 +31,8 @@
     <section id="tab-scan" class="panel active" role="tabpanel" aria-labelledby="nav-scan">
       <div class="scan-layout">
         <div class="card camera-card">
+          <h2 id="scan-title" tabindex="-1">Ảnh 1/6</h2>
+          <p class="muted small">Xác nhận chỉ chốt màu 9 ô của mặt này. Chiều cầm tùy ý; app tự ghép và xoay sau khi đủ 6 mặt.</p>
           <div class="camera-wrap" id="camera-wrap">
             <canvas id="camera-canvas" width="640" height="480"></canvas>
             <div id="camera-hud" class="camera-hud" hidden></div>
@@ -83,14 +85,13 @@
         </div>
 
         <div class="card guide-card">
-          <h2 id="scan-title">Mặt TRƯỚC</h2>
+          <h2>Các mặt đã chụp</h2>
           <div class="guide-visual">
             <div class="edge-label top" id="edge-top">Cạnh trên: mặt TRÊN</div>
             <div class="mini-face" id="current-preview"></div>
             <div class="edge-label bottom" id="edge-bottom">Cạnh dưới: mặt DƯỚI</div>
           </div>
           <p id="scan-instruction" class="instruction"></p>
-          <h3>Tiến độ</h3>
           <ol id="face-list" class="face-list"></ol>
           <div class="row wrap">
             <button id="btn-to-edit" class="btn">Sang bước kiểm tra màu →</button>
@@ -363,10 +364,13 @@
           <p class="muted small">Mỗi phòng một đề, mỗi người một kết quả. Muốn thi lượt mới? Tạo phòng mới.</p>
         </div>
         <div class="room-layout">
-          <div id="room-game" class="card room-game">
+          <div id="room-game" class="card room-game" tabindex="-1" role="group" aria-label="Sân thi đấu Rubik">
             <div class="room-game-head">
               <span id="room-me"></span>
-              <button id="room-fullscreen" class="btn small" type="button" hidden>⛶ Toàn màn hình</button>
+              <div class="room-game-actions">
+                <button id="room-back" class="btn small" type="button" hidden>← Về phòng</button>
+                <button id="room-fullscreen" class="btn small" type="button" aria-pressed="false">⛶ Toàn màn hình</button>
+              </div>
             </div>
             <div class="room-stats" aria-label="Thời gian và số bước của bạn">
               <div><span>Thời gian</span><strong id="room-time">0:00.00</strong></div>
@@ -402,18 +406,18 @@
   <div id="color-picker" class="color-picker" hidden role="dialog" aria-label="Chọn màu cho ô"></div>
   <div id="toast" class="toast" hidden></div>
 
-  <script src="js/cube.js?v=20261113rooms1"></script>
-  <script src="js/play-moves.js?v=20261113rooms1"></script>
-  <script src="js/play-gesture.js?v=20261113rooms1"></script>
-  <script src="js/solver.js?v=20261113rooms1"></script>
-  <script src="js/vision.js?v=20261113rooms1"></script>
-  <script src="js/cube3d.js?v=20261113rooms1"></script>
-  <script src="js/lessons.js?v=20261113rooms1"></script>
-  <script src="js/learn.js?v=20261113rooms1"></script>
-  <script src="js/play-state.js?v=20261113rooms1"></script>
-  <script src="js/play.js?v=20261113rooms1"></script>
-  <script src="js/room-attempt.js?v=20261113rooms1"></script>
-  <script src="js/rooms.js?v=20261113rooms1"></script>
-  <script src="js/app.js?v=20261113rooms1"></script>
+  <script src="js/cube.js?v=20261114rooms2"></script>
+  <script src="js/play-moves.js?v=20261114rooms2"></script>
+  <script src="js/play-gesture.js?v=20261114rooms2"></script>
+  <script src="js/solver.js?v=20261114rooms2"></script>
+  <script src="js/vision.js?v=20261114rooms2"></script>
+  <script src="js/cube3d.js?v=20261114rooms2"></script>
+  <script src="js/lessons.js?v=20261114rooms2"></script>
+  <script src="js/learn.js?v=20261114rooms2"></script>
+  <script src="js/play-state.js?v=20261114rooms2"></script>
+  <script src="js/play.js?v=20261114rooms2"></script>
+  <script src="js/room-attempt.js?v=20261114rooms2"></script>
+  <script src="js/rooms.js?v=20261114rooms2"></script>
+  <script src="js/app.js?v=20261114rooms2"></script>
 </body>
 </html>

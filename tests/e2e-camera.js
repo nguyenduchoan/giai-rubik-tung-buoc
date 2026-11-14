@@ -155,8 +155,8 @@ function check(name, ok, detail) {
           await sleep(150);
           check('bấm Chụp lại => quay về camera trực tiếp',
             await evaluate(`!document.querySelector('#face-preview-box').classList.contains('is-preview') && document.querySelector('#btn-retake-face').hidden`));
-          // Chờ nhận diện ổn định lại rồi bấm xác nhận 3 lần liên tiếp trên cùng 1 tâm:
-          // chỉ được cập nhật vào đúng tâm đó (1/6 mặt), không tạo ra 3 ảnh trùng tâm.
+          // Bấm xác nhận 3 lần trên cùng một tâm không được đếm thành 3 mặt:
+          // sau lần đầu chuyển sang mặt kế tiếp và chờ xoay khối, không giữ mặt vừa lưu để xác nhận lại.
           for (let j = 0; j < 20 && !/Đã nhận diện màu/.test(await text('#camera-hud')); j++) await sleep(150);
           await evaluate(`document.querySelector('#btn-confirm-face').click()`);
           await sleep(200);
@@ -164,7 +164,7 @@ function check(name, ok, detail) {
           await sleep(200);
           await evaluate(`document.querySelector('#btn-confirm-face').click()`);
           await sleep(150);
-          check('bấm xác nhận 3 lần trên cùng 1 tâm => chỉ cập nhật tâm đó (1/6 mặt)',
+          check('bấm xác nhận 3 lần trên cùng 1 tâm => vẫn chỉ 1/6 mặt, đang chờ mặt tiếp theo',
             /1\/6/.test(await text('#auto-status')) &&
             await evaluate(`document.querySelectorAll('#face-list li.done').length === 1`),
             await text('#auto-status'));

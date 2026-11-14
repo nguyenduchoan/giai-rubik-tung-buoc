@@ -8,6 +8,59 @@
   let pending = null, saving = false, entering = false, refreshing = false, tick = null;
   let generation = 0, clockFrame = 0;
   const game = $('#room-game');
+  let expanded = false;
+  const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const isFullscreen = () => fullscreenElement() === game;
+  const fullscreenSupported = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled) &&
+    !!(game.requestFullscreen || game.webkitRequestFullscreen);
+  function exitFullscreen() {
+    if (!isFullscreen()) return;
+    try {
+      const result = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen();
+      if (result?.catch) result.catch(() => {});
+    } catch (error) { /* Trình duyệt đã tự thoát. */ }
+  }
+  function enterFullscreen() {
+    if (!fullscreenSupported() || isFullscreen()) return;
+    try {
+      const result = game.requestFullscreen ? game.requestFullscreen({ navigationUI: 'hide' }) : game.webkitRequestFullscreen();
+      if (result?.then) result.then(() => { if (!expanded) exitFullscreen(); }, () => {});
+    } catch (error) { /* Sân chơi vẫn phủ kín trang nếu trình duyệt từ chối. */ }
+  }
+  function updateFullscreenButton() {
+    const button = $('#room-fullscreen');
+    button.textContent = isFullscreen() ? '⛶ Thu nhỏ' : '⛶ Toàn màn hình';
+    button.setAttribute('aria-pressed', String(isFullscreen()));
+  }
+  function openGame() {
+    expanded = true;
+    document.documentElement.classList.add('room-open');
+    game.classList.add('room-expanded');
+    $('#room-back').hidden = false;
+    document.querySelectorAll('.app-header, #update-banner, .room-heading, .room-results').forEach((element) => element.inert = true);
+    // Yêu cầu ngay trong thao tác bấm để trình duyệt cho phép mở toàn màn hình.
+    enterFullscreen();
+    fit();
+    game.focus({ preventScroll: true });
+  }
+  function closeGame(focus = false) {
+    if (!expanded) return;
+    expanded = false;
+    exitFullscreen();
+    document.documentElement.classList.remove('room-open');
+    game.classList.remove('room-expanded');
+    $('#room-back').hidden = true;
+    document.querySelectorAll('.app-header, #update-banner, .room-heading, .room-results').forEach((element) => {
+      element.inert = !!window.Rubik.play?.active && element.matches('.app-header, #update-banner');
+    });
+    fit();
+    if (focus) {
+      const button = $('#room-fullscreen');
+      button.focus({ preventScroll: true });
+      // Phần còn lại của trang chỉ nhận tiêu điểm sau khi trình duyệt thoát toàn màn hình.
+      if (isFullscreen()) game.addEventListener('fullscreenchange', () => button.focus({ preventScroll: true }), { once: true });
+    }
+  }
   const hex = (c) => V.PALETTE[PlayState.PALETTE[c]].hex;
   const formatTime = (ms) => {
     const cs = Math.floor(ms / 10);
@@ -176,7 +229,7 @@
     if (attempt !== current) return;
     if (current.result) {
       pending = { ...current.result }; player.pending = pending; remember();
-      if (document.fullscreenElement === game) document.exitFullscreen().catch(() => {});
+      closeGame(true);
       void saveResult();
     }
     render();
@@ -194,10 +247,12 @@
     if (!active || !room || ownResult() || attempt || pending) return;
     attempt = new RoomAttempt(room.scramble);
     view.setColors(attempt.model.colors.map(hex));
+    openGame();
     render(); fit();
   });
   $('#room-leave').addEventListener('click', () => {
     if (view?.animating) return;
+    closeGame();
     generation++; clearInterval(tick); cancelAnimationFrame(clockFrame); view?.cancelGesture();
     room = player = attempt = pending = null;
     $('#room-content').hidden = true; $('#room-entry').hidden = false; $('#room-error').textContent = '';
@@ -215,12 +270,17 @@
   }
   for (const id of ['layer', 'mode']) $('#room-' + id).addEventListener('change', render);
   $('#room-view').addEventListener('click', () => view?.resetView());
-  $('#room-fullscreen').hidden = !document.fullscreenEnabled || !game.requestFullscreen;
+  $('#room-back').addEventListener('click', () => { view?.cancelGesture(); closeGame(true); });
   $('#room-fullscreen').addEventListener('click', () => {
-    const job = document.fullscreenElement === game ? document.exitFullscreen() : game.requestFullscreen();
-    job.catch(() => { $('#room-status').textContent = 'Trình duyệt chưa cho mở toàn màn hình. Bạn vẫn có thể chơi ngay tại đây.'; });
+    if (isFullscreen()) exitFullscreen();
+    else openGame();
   });
-  document.addEventListener('fullscreenchange', () => { $('#room-fullscreen').textContent = document.fullscreenElement === game ? '⛶ Thu nhỏ' : '⛶ Toàn màn hình'; fit(); });
+  function onFullscreenChange() {
+    if (isFullscreen() && !expanded) exitFullscreen();
+    updateFullscreenButton(); fit();
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
   document.addEventListener('keydown', (event) => {
     if (!canTurn() || event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey ||
         event.target.closest('input, select, textarea, .tabs, [contenteditable]')) return;
@@ -238,7 +298,7 @@
       active = value;
       if (!value) {
         view?.cancelGesture();
-        if (document.fullscreenElement === game) document.exitFullscreen().catch(() => {});
+        closeGame();
       } else { resumeButton(); fit(); render(); void refresh(); }
       scheduleRefresh(); clock();
     },
