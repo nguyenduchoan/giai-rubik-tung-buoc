@@ -124,7 +124,7 @@
     if (name === 'solve') renderSolve();
     window.Rubik.learn.setActive(name === 'learn');
     window.Rubik.play.setActive(name === 'play', { requestFullscreen: fromUser });
-    window.Rubik.rooms.setActive(name === 'rooms');
+    window.Rubik.online.setActive(name === 'rooms'); // gồm cả Thi tự do giờ (rooms.js)
     updateWakeLock();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -538,7 +538,7 @@
   }
 
   // Mở trang trên điện thoại: hỏi quyền camera ngay. Máy tính: chỉ tự bật khi đã được cấp quyền trước đó.
-  async function initCamera() {
+  async function initCamera({ autoStart = true } = {}) {
     if (!cameraSupported()) {
       showCameraNote('Trang đang mở qua <b>http</b> nên trình duyệt không cho dùng camera trực tiếp. ' +
         'Dùng nút <b>📸 Chụp bằng app camera</b> bên dưới để chụp từng mặt.');
@@ -556,7 +556,7 @@
         'hoặc dùng <b>📸 Chụp bằng app camera</b>.');
       return;
     }
-    if (permission === 'granted' || IS_TOUCH) startCamera();
+    if ((permission === 'granted' || IS_TOUCH) && autoStart) startCamera();
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -1916,7 +1916,7 @@
     } catch (e) { return; }
     if (!latest || latest === APP_VERSION) return;
     // Chỉ tự tải lại khi trang còn nguyên như lúc mở: chưa chụp, chưa tô/sửa màu, chưa giải.
-    const pristine = !['learn', 'play', 'rooms'].includes(activeTab()) && !window.Rubik.rooms.inProgress && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
+    const pristine = !['learn', 'play', 'rooms'].includes(activeTab()) && !window.Rubik.rooms.inProgress && !window.Rubik.online.inProgress && !state.solution && !SCAN_ORDER.some((f) => state.scanned[f]) &&
       state.colors.every((c, i) => c === INITIAL_COLORS[i]);
     if (pristine) { location.reload(); return; }
     $('#update-banner').hidden = false;
@@ -1928,5 +1928,6 @@
 
   renderScanGuide();
   renderSolve();
-  initCamera();
+  // Liên kết mời Thi trực tiếp (#room=MÃ) mở thẳng tab Phòng thi đấu và không tự bật camera.
+  initCamera({ autoStart: !window.Rubik.online.openFromHash() });
 })();

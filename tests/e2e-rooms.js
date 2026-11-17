@@ -76,6 +76,7 @@ const out = path.resolve(process.argv[2] || '.e2e-out/rooms');
   const text = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)}).textContent.trim()`);
   const open = async (page) => {
     await page.send('Page.navigate', { url }); await wait(page, '!!window.Rubik?.rooms'); await click(page, '#nav-rooms');
+    await click(page, '#rooms-mode-async');
   };
   const screenshot = async (page, name) => {
     const shot = await page.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });

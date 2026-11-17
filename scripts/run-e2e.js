@@ -7,6 +7,7 @@
  *   - tests/e2e-learn.js: lộ trình học, mô phỏng công thức và lưu tiến độ
  *   - tests/e2e-play.js: Rubik tự chơi, chuột/cảm ứng, hoàn tác và lưu khối
  *   - tests/e2e-rooms.js: hai trình duyệt tạo/vào/giải, gửi lại khi mất mạng và xem kết quả
+ *   - tests/e2e-online.js: Thi trực tiếp hai trình duyệt: mời bằng liên kết, quan sát, thi, tải lại giữa ván, kết quả
  *   npm run test:e2e                 # tất cả
  *   MISTAKES=2 npm run test:e2e      # chỉ một (hoặc vài: MISTAKES=1,3) kịch bản camera
  * Cần Google Chrome/Chromium; đặt CHROME_BIN nếu lệnh `google-chrome` không có trên PATH.
@@ -89,6 +90,8 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
     if (!(await run(playLabel, [path.join(TESTS, 'e2e-play.js'), path.join(OUT, 'play')]))) failed.push(playLabel);
     const roomsLabel = 'Phòng thi đấu (e2e-rooms)';
     if (!(await run(roomsLabel, [path.join(TESTS, 'e2e-rooms.js'), path.join(OUT, 'rooms')]))) failed.push(roomsLabel);
+    const onlineLabel = 'Thi trực tiếp (e2e-online)';
+    if (!(await run(onlineLabel, [path.join(TESTS, 'e2e-online.js'), path.join(OUT, 'online')]))) failed.push(onlineLabel);
   }
   console.log(failed.length ? `\nKHÔNG ĐẠT: ${failed.join('; ')}` : '\nĐẠT tất cả kiểm thử trình duyệt');
   process.exitCode = failed.length ? 1 : 0;

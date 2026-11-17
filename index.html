@@ -334,10 +334,128 @@
       </div>
     </section>
     <section id="tab-rooms" class="panel" role="tabpanel" aria-labelledby="nav-rooms">
+      <div class="room-modes" role="group" aria-label="Kiểu thi">
+        <button id="rooms-mode-live" class="btn" type="button" aria-pressed="true">⚡ Thi trực tiếp</button>
+        <button id="rooms-mode-async" class="btn" type="button" aria-pressed="false">⏱ Thi tự do giờ</button>
+      </div>
+      <div id="rooms-live">
+        <div id="online-entry" class="card room-entry">
+          <p class="learn-eyebrow">CÙNG KHỐI · CÙNG GIỜ · MÁY CHỦ BẤM GIỜ</p>
+          <h2>Thi trực tiếp</h2>
+          <p>2–8 người nhận cùng một khối, quan sát 15 giây rồi bắt đầu cùng lúc. Máy chủ kiểm tra từng nước xoay và tính giờ; giải tối đa 10 phút.</p>
+          <p id="online-service" class="muted small" role="status"></p>
+          <div id="online-current" class="online-current" hidden>
+            <p>Bạn đang ở phòng <b id="online-current-code"></b>.</p>
+            <div class="row wrap">
+              <button id="online-reopen" class="btn primary" type="button">Mở lại phòng</button>
+              <button id="online-leave-old" class="btn" type="button">Rời phòng đó</button>
+            </div>
+          </div>
+          <form id="online-form">
+            <label for="online-nickname">Biệt danh của bạn</label>
+            <input id="online-nickname" type="text" maxlength="20" autocomplete="nickname" placeholder="2–20 ký tự, ví dụ: Hoàn" required>
+            <button id="online-create" class="btn primary" type="submit" value="create">＋ Tạo phòng thi</button>
+            <div class="room-join">
+              <label for="online-code">Đã có mã mời?</label>
+              <div class="row">
+                <input id="online-code" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Mã 8 ký tự" aria-label="Mã mời thi trực tiếp">
+                <button id="online-join" class="btn" type="submit" value="join">Vào phòng →</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <p id="online-error" class="room-error" role="alert"></p>
+        <div id="online-room" hidden>
+          <div class="card room-heading online-heading">
+            <div><p class="learn-eyebrow">MÃ PHÒNG THI</p><h2 id="online-room-code"></h2></div>
+            <div class="row wrap">
+              <button id="online-copy" class="btn primary" type="button">Sao chép liên kết mời</button>
+              <button id="online-leave" class="btn" type="button">Rời phòng</button>
+              <button id="online-close" class="btn" type="button" hidden>Đóng phòng</button>
+            </div>
+            <p id="online-rules" class="muted small"></p>
+            <p class="small"><span id="online-net" class="online-net" data-state="connecting">Đang kết nối…</span></p>
+          </div>
+          <div id="online-takeover" class="card online-banner" hidden>
+            <p>Phòng đang mở ở một tab hoặc thiết bị khác của bạn. Chỉ một nơi được điều khiển lượt thi.</p>
+            <button id="online-claim" class="btn primary" type="button">Dùng tab này</button>
+          </div>
+          <div class="room-layout">
+            <div class="card online-main">
+              <h3 id="online-phase" tabindex="-1"></h3>
+              <p id="online-phase-note" role="status" aria-live="polite"></p>
+              <div class="row wrap online-actions">
+                <button id="online-ready" class="btn primary" type="button" hidden>✋ Sẵn sàng</button>
+                <button id="online-start" class="btn primary" type="button" hidden>▶ Bắt đầu ván</button>
+                <button id="online-start-without" class="btn" type="button" hidden></button>
+                <button id="online-open-arena" class="btn primary" type="button" hidden>⛶ Mở sân thi</button>
+                <button id="online-next" class="btn primary" type="button" hidden>↻ Thi lại với khối mới</button>
+              </div>
+              <ul id="online-blockers" class="online-blockers"></ul>
+              <div id="online-result" hidden>
+                <div class="room-table-wrap">
+                  <table class="room-table">
+                    <caption id="online-result-title"></caption>
+                    <thead><tr><th scope="col">Hạng</th><th scope="col">Người chơi</th><th scope="col">Thời gian</th><th scope="col">Số nước</th></tr></thead>
+                    <tbody id="online-result-rows"></tbody>
+                  </table>
+                </div>
+                <p class="muted small">Máy chủ đo từ mốc bắt đầu chung tới lúc nhận nước hoàn thành (gồm cả độ trễ mạng), làm tròn xuống 1/100 giây. Cùng thời gian là đồng hạng; số nước chỉ để tham khảo.</p>
+              </div>
+            </div>
+            <div class="card online-side">
+              <div class="room-game-head"><h3>Người trong phòng</h3><button id="online-rename" class="btn small" type="button">Đổi tên</button></div>
+              <form id="online-rename-form" class="row online-rename" hidden>
+                <input id="online-rename-input" type="text" maxlength="20" aria-label="Biệt danh mới" required>
+                <button class="btn small primary" type="submit">Lưu</button>
+              </form>
+              <ul id="online-members" class="online-members"></ul>
+              <details id="online-history" class="online-history">
+                <summary>Các ván trước trong phòng</summary>
+                <ol id="online-history-list"></ol>
+                <div id="online-history-detail"></div>
+              </details>
+            </div>
+          </div>
+          <div id="online-game" class="card room-game online-game" tabindex="-1" role="group" aria-label="Sân thi trực tiếp" hidden>
+            <div class="room-game-head">
+              <span id="online-me"></span>
+              <div class="room-game-actions">
+                <button id="online-surrender" class="btn small" type="button">🏳 Bỏ cuộc</button>
+                <button id="online-back" class="btn small" type="button">← Về phòng</button>
+                <button id="online-fullscreen" class="btn small" type="button" aria-pressed="false" aria-label="Toàn màn hình">⛶</button>
+              </div>
+            </div>
+            <div class="room-stats" aria-label="Đồng hồ và số nước của bạn">
+              <div><span>Thời gian</span><strong id="online-clock">0:00.00</strong></div>
+              <div><span>Số nước</span><strong id="online-moves">0</strong></div>
+              <div><span>Mạng</span><strong id="online-net-small" class="online-net-small" data-state="connecting">●</strong></div>
+            </div>
+            <p id="online-status" class="room-status" role="status" aria-live="polite"></p>
+            <div class="online-cube-wrap">
+              <div id="online-cube" class="cube3d-container" role="group" aria-label="Rubik thi đấu: một ngón xoay lớp, hai ngón xoay hai lớp độc lập, ba ngón đổi góc nhìn"></div>
+              <div id="online-countdown" class="online-countdown" aria-hidden="true" hidden></div>
+            </div>
+            <p id="online-opponents" class="online-opponents small"></p>
+            <div class="room-controls">
+              <label>Lớp <select id="online-layer" aria-label="Lớp cần xoay"></select></label>
+              <label>Chuột <select id="online-mode"><option value="layer1">1 lớp</option><option value="layer2">2 lớp</option><option value="view">Góc nhìn</option></select></label>
+              <div class="room-turns">
+                <button id="online-cw" class="btn" type="button" aria-label="Xoay 90 độ">↻ 90°</button>
+                <button id="online-ccw" class="btn" type="button" aria-label="Xoay ngược 90 độ">↺ 90°</button>
+                <button id="online-half" class="btn" type="button">180°</button>
+                <button id="online-view" class="btn" type="button">⟲ Góc nhìn</button>
+              </div>
+            </div>
+            <p class="muted small room-help">1 ngón xoay lớp · 2 ngón xoay hai lớp · 3 ngón đổi góc nhìn. Phím R/L/U/D/F/B/M/E/S, giữ Shift để xoay ngược.</p>
+          </div>
+        </div>
+      </div>
+      <div id="rooms-async" hidden>
       <div id="room-entry" class="card room-entry">
         <p class="learn-eyebrow">CÙNG BẠN BÈ THỬ SỨC</p>
-        <h2>Phòng thi đấu Rubik</h2>
-        <p>Cùng một khối tráo, mỗi người tự bắt đầu. Giải xong để so thời gian và số bước với bạn bè.</p>
+        <h2>Thi tự do giờ</h2>
+        <p>Cùng một khối tráo, mỗi người tự bắt đầu lúc nào cũng được. Giải xong để so thời gian và số bước với bạn bè.</p>
         <form id="room-form">
           <label for="room-nickname">Biệt danh của bạn</label>
           <input id="room-nickname" type="text" maxlength="24" autocomplete="nickname" placeholder="Ví dụ: Hoàn" required>
@@ -400,6 +518,7 @@
           </div>
         </div>
       </div>
+      </div>
     </section>
   </main>
 
@@ -418,6 +537,9 @@
   <script src="js/play.js?v=20261114rooms2"></script>
   <script src="js/room-attempt.js?v=20261114rooms2"></script>
   <script src="js/rooms.js?v=20261114rooms2"></script>
+  <script src="js/online-protocol.js?v=20261114rooms2"></script>
+  <script src="js/online-client.js?v=20261114rooms2"></script>
+  <script src="js/online.js?v=20261114rooms2"></script>
   <script src="js/app.js?v=20261114rooms2"></script>
 </body>
 </html>

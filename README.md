@@ -5,7 +5,7 @@
 
 Web giải khối Rubik 3×3 cho người mới: **chụp 6 mặt bằng camera điện thoại → app tự nhận màu, tự ghép và xoay các ảnh cho khớp → hướng dẫn giải từng bước bằng mô phỏng 3D**, toàn bộ bằng tiếng Việt.
 
-Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, không phụ thuộc thư viện ngoài, không gửi ảnh lên máy chủ**. Nhận màu, giải và mô phỏng chạy trong trình duyệt; phòng thi đấu dùng thêm máy chủ Node.js để chia sẻ đề và lưu kết quả.
+Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, không phụ thuộc thư viện ngoài, không gửi ảnh lên máy chủ**. Nhận màu, giải và mô phỏng chạy trong trình duyệt; phòng thi đấu dùng thêm máy chủ Node.js (WebSocket và SQLite có sẵn trong Node, không thêm thư viện) để chia sẻ đề, bấm giờ và lưu kết quả.
 
 > **English:** A zero-dependency, client-side web app that scans a 3×3 Rubik's cube with the phone camera, auto-detects colors, fixes faces captured in the wrong order/orientation, solves it with Kociemba's two-phase algorithm and walks you through each move with a 3D animation. UI and docs are in Vietnamese.
 
@@ -37,7 +37,9 @@ Giao diện viết bằng HTML/CSS/JavaScript thuần: **không cần build, kh�
 
    Khi khối chưa giải, dưới khối có nút **💡 Hướng dẫn giải**: bấm vào sẽ mang nguyên khối đang chơi (đúng màu, đúng hướng cầm, kể cả khi lớp giữa/hai lớp đã làm tâm đổi chỗ) sang tab **3. Hướng dẫn giải**, tự tính lời giải và hướng dẫn từng bước. Khối đang chơi không bị đổi; khối mang sang thay cho màu ở bước 2 (nếu đã có ảnh chụp thì app hỏi trước).
 
-6. **Phòng thi đấu**: nhập biệt danh để tạo phòng hoặc vào bằng mã mời 6 ký tự, không cần tài khoản. Mỗi phòng có một khối tráo chung; mỗi người bấm **Bắt đầu** để mở sân thi đấu phủ kín màn hình và khóa cuộn trang, rồi tự giải. Nếu trình duyệt cho phép thì tự vào toàn màn hình; nếu không, sân chơi vẫn phủ kín trang. Nút **Về phòng** mở lại bảng kết quả và giữ lượt đang chơi; giải xong tự về phòng. Đồng hồ chạy từ nước xoay đầu tiên. Giải xong tự lưu thời gian và số bước vào bảng chung, có Gửi lại khi lỗi mạng; kết quả đã lưu còn sau khi mở lại trang hoặc khởi động lại máy chủ. Một người có một kết quả/phòng, muốn thi lượt mới thì tạo phòng mới. Một nước 180° hoặc hai lớp `Rw` tính một bước; hai ngón xoay hai lớp độc lập tính hai bước. Kết quả giao hữu do trình duyệt tự báo, chấp nhận có thể bị giả; chưa có đồng bộ bắt đầu hay chống gian lận. Phần này cần chạy `npm start` hoặc dịch vụ phòng trên Hub.
+6. **Phòng thi đấu** có hai kiểu, chọn ở đầu tab:
+   - **⚡ Thi trực tiếp** (mặc định): 2–8 người vào phòng bằng biệt danh và mã mời 8 ký tự hoặc liên kết `…/rubik/#room=MÃ`, không cần tài khoản. Mọi người bấm **Sẵn sàng**, chủ phòng bấm **Bắt đầu**; máy chủ phát cùng một khối tráo theo trạng thái ngẫu nhiên, mọi người quan sát 15 giây (ba giây cuối đếm ngược, chỉ xoay được góc nhìn) rồi bắt đầu cùng một mốc giờ máy chủ. Máy chủ kiểm tra từng nước xoay (lớp ngoài, `M/E/S`, hai lớp, 90°/ngược/180°), tự nhận biết khối đã giải và đo thời gian; trình duyệt không tự báo kết quả. Xếp hạng theo 1/100 giây, cùng thời gian là đồng hạng; quá 10 phút, bỏ cuộc, rời phòng hoặc mất kết nối cộng dồn quá 60 giây trong một lượt là DNF. Mất mạng hay tải lại trang thì tự nối lại và nhận đúng khối, đồng hồ không dừng. Mở phòng ở tab khác thì phải bấm **Dùng tab này** để lấy quyền điều khiển. Chủ phòng có **Thi lại** (khối mới), chuyển chủ, mời ra (không vào lại được) và đóng phòng; chủ rời/mất kết nối quá 60 giây thì quyền chủ tự chuyển, nhưng không bao giờ giữa ván. Dịch vụ khởi động lại giữa ván thì ván đó bị hủy cho cả phòng. Kết quả các ván xem lại được trong 7 ngày. Thi giao hữu: máy chủ chứng minh khối đã giải, không chứng minh người chơi tự nghĩ lời giải.
+   - **⏱ Thi tự do giờ**: nhập biệt danh để tạo phòng hoặc vào bằng mã mời 6 ký tự, không cần tài khoản. Mỗi phòng có một khối tráo chung; mỗi người bấm **Bắt đầu** để mở sân thi đấu phủ kín màn hình và khóa cuộn trang, rồi tự giải. Nếu trình duyệt cho phép thì tự vào toàn màn hình; nếu không, sân chơi vẫn phủ kín trang. Nút **Về phòng** mở lại bảng kết quả và giữ lượt đang chơi; giải xong tự về phòng. Đồng hồ chạy từ nước xoay đầu tiên. Giải xong tự lưu thời gian và số bước vào bảng chung, có Gửi lại khi lỗi mạng; kết quả đã lưu còn sau khi mở lại trang hoặc khởi động lại máy chủ. Một người có một kết quả/phòng, muốn thi lượt mới thì tạo phòng mới. Một nước 180° hoặc hai lớp `Rw` tính một bước; hai ngón xoay hai lớp độc lập tính hai bước. Kết quả giao hữu do trình duyệt tự báo, chấp nhận có thể bị giả; chưa có đồng bộ bắt đầu hay chống gian lận. Phần này cần chạy `npm start` hoặc dịch vụ phòng trên Hub.
 
 ## Chạy trên máy
 
@@ -97,6 +99,10 @@ Mẹo: chụp nơi đủ sáng, tránh lóa, đặt mặt Rubik vừa khít khun
 | `js/play-state.js`, `js/play.js` | Trạng thái khối tự chơi, lịch sử hoàn tác/làm lại, lưu khối; sân chơi toàn màn hình, nút, bàn phím và công thức |
 | `js/room-attempt.js`, `js/rooms.js` | Lượt giải có bộ đếm riêng; tạo/vào phòng, đồng hồ, gửi kết quả và bảng so sánh |
 | `scripts/rooms.js`, `scripts/serve.js` | API phòng (giao diện gọi máy chủ), lưu tệp dữ liệu và phục vụ trang khi chạy bằng Node |
+| `js/online-protocol.js` | Giao thức Thi trực tiếp dùng chung trình duyệt/máy chủ: phiên bản mô hình, mã phòng, biệt danh, nước hợp lệ, mã kiểm tra trạng thái, thông báo lỗi |
+| `js/online-client.js`, `js/online.js` | Kết nối WebSocket tự nối lại, đồng bộ đồng hồ máy chủ; giao diện phòng chờ, quan sát, thi, kết quả, lịch sử ván |
+| `server/online/` | Dịch vụ Thi trực tiếp: luật phòng/ván/lượt (`service.js`), WebSocket tự viết (`ws.js`), lưu SQLite theo ranh giới ván (`store.js`), bộ tráo random-state trong luồng phụ (`scrambler.js`), API HTTP (`http.js`) |
+| `scripts/hub-proxy.js`, `scripts/install-hub-proxy.js` | Chuyển `/api/rubik/` (HTTP và WebSocket) từ API Hub tới dịch vụ phòng |
 | `tests/` | Kiểm thử Node và kiểm thử trình duyệt (camera giả) |
 | `test-images/` | 6 ảnh mặt mẫu để thử thủ công |
 | `scripts/` | Máy chủ tĩnh, chạy kiểm thử trình duyệt, script triển khai |
@@ -116,6 +122,9 @@ npm run test:e2e    # cần Google Chrome: giả lập điện thoại + camera 
 | `node tests/arrange.test.js` | Tự đổi chỗ/xoay các mặt chụp nhầm, gợi ý sửa 2 ô nhận nhầm màu (có giới hạn thời gian) |
 | `node tests/serve.test.js` | Máy chủ chạy thử: trả đúng file, từ chối đường dẫn xấu (NUL, `..`, file ẩn, symlink ra ngoài) mà không dừng |
 | `node tests/rooms.test.js` | Bộ đếm vượt 200 lượt, hai nước/lượt, đồng hồ; cùng đề, ghi đồng thời, gửi lại, lỗi ghi và dữ liệu qua khởi động lại |
+| `node tests/online-rooms.test.js` | Luật Thi trực tiếp với đồng hồ giả và SQLite thật: điều kiện bắt đầu, cùng khối/mốc, chặn nước trước giờ, gửi lại/xung đột/thiếu thứ tự/lệch trạng thái, đồng hạng, hết giờ, bỏ cuộc, rời phòng, mất kết nối cộng dồn, hủy chuẩn bị và bắt đầu không có người gây hủy, hai tab, loại/chặn, chuyển chủ, khởi động lại → VOID, lỗi ghi → VOID, giới hạn tốc độ |
+| `node tests/online-ws.test.js` | HTTP + WebSocket thật qua lớp chuyển tiếp như Hub: cookie phiên, chặn trang lạ, khung quá 4 KiB/nhị phân, ván hai người, nối lại, lịch sử, khởi động lại tiến trình giữa ván |
+| `node tests/e2e-online.js` | Hai Chrome độc lập: tạo phòng, mời bằng liên kết, quan sát cùng khối, khóa xoay trước giờ, giải bằng bàn phím, tải lại trang giữa ván, bảng kết quả, thi lại, lịch sử, chuyển kiểu thi, bố cục điện thoại |
 | `node tests/e2e-rooms.js` | Hai trình duyệt riêng tạo/vào và giải, mất mạng rồi gửi lại, bảo toàn khối tự chơi, mở lại kết quả và bố cục 320–390 px; chạy dưới `/rubik/` qua tuyến API Hub |
 | `node tests/lessons.test.js` | Tác dụng và điều kiện khối mẫu của từng công thức, bảo toàn các phần đã giải, kiểm tra hướng góc và hoán vị cạnh |
 | `node tests/e2e-learn.js` | Tab học: tiến/lùi, tự chạy/dừng, đổi bài/công thức giữa hoạt ảnh, giữ nguyên lời giải thật, lưu tiến độ, lưu trữ bị chặn và bố cục điện thoại |
@@ -134,12 +143,12 @@ CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm ru
 
 Các tính năng chụp/giải/học/Chơi tự do chỉ cần chép `index.html`, `css/` và `js/` lên dịch vụ web tĩnh có **HTTPS**. Phòng thi đấu cần thêm dịch vụ Node để các máy chia sẻ phòng và lưu kết quả.
 
-`npm start` phục vụ cả trang và API phòng tại `/api/`; dữ liệu mặc định nằm trong `.local/room-data/rooms.json`. Đặt `ROOM_DATA_DIR` để chọn thư mục riêng, giữ lại thư mục này qua các lần phát hành và chỉ chạy một tiến trình ghi. Không đưa thư mục dữ liệu vào vùng phục vụ tệp công khai. Máy chủ không tự xóa phòng; sao lưu tệp dữ liệu khi dịch vụ đã dừng.
+`npm start` phục vụ cả trang, API phòng tại `/api/` và Thi trực tiếp tại `/api/online/` (WebSocket `/api/online/ws`); dữ liệu mặc định nằm trong `.local/room-data/` (`rooms.json` và `online/online.sqlite`). Thi trực tiếp chỉ chạy một tiến trình trên một thư mục dữ liệu (có khóa tệp); khởi động lại dịch vụ làm các ván đang chạy thành VOID, nên cập nhật lúc không có ván. Tạo tệp `online/maintenance` trong thư mục dữ liệu (hoặc `ONLINE_MAINTENANCE=1`) để ngừng mở phòng/ván mới trước khi bảo trì. `GET /api/online/health` báo tình trạng dịch vụ và số phòng/kết nối. Đặt `ROOM_DATA_DIR` để chọn thư mục riêng, giữ lại thư mục này qua các lần phát hành và chỉ chạy một tiến trình ghi. Không đưa thư mục dữ liệu vào vùng phục vụ tệp công khai. Phòng Thi tự do giờ không tự xóa; Thi trực tiếp đóng phòng vắng 30 phút hoặc quá 4 giờ và xóa ván/phòng đã đóng sau 7 ngày. Sao lưu thư mục dữ liệu khi dịch vụ đã dừng.
 
 - Nếu máy chủ cache JS/CSS lâu, hãy đổi tham số `?v=` trong `index.html` và `js/app.js` mỗi lần phát hành để điện thoại không dùng bản cũ.
 - Tab đã mở sẵn sẽ tự phát hiện bản mới khi người dùng quay lại tab: tự tải lại nếu chưa chụp/giải gì, nếu đang dở thì hiện nút **↻ Tải lại**.
 - `scripts/deploy-hub.sh` triển khai lên Server Hub: chạy kiểm thử, cài dịch vụ `rubik-rooms` bằng PM2 (công cụ giữ tiến trình chạy nền) trên `127.0.0.1:3002`, lưu dữ liệu dưới `$HUB_ROOT/data/rubik-rooms`, rồi đặt phiên bản tài nguyên và chép giao diện vào `/rubik/`. Dịch vụ được lưu trong cấu hình PM2 để chạy lại khi máy khởi động.
-- Hub chuyển `/api/rubik/` tới dịch vụ phòng thông qua bộ chuyển tiếp nhỏ gắn trước phần đọc dữ liệu của API Hub; không cần sửa nginx. Tệp HTML trên Hub được thêm `rubik-api-base=/api/rubik/`; chạy riêng vẫn dùng API tương đối. Bộ cài giữ bản mã API Hub trước thay đổi tại `data/rubik-room-service/hub-app.before-rubik.js` và kiểm thử API Hub trước khi khởi động lại.
+- Hub chuyển `/api/rubik/` tới dịch vụ phòng thông qua bộ chuyển tiếp nhỏ gắn trước phần đọc dữ liệu của API Hub; không cần sửa nginx (nginx đã chuyển nâng cấp WebSocket cho `/api/`). Bộ chuyển tiếp chỉ gửi cookie `rubik_guest` sang dịch vụ phòng, không gửi cookie đăng nhập Hub. `server.js` của API Hub được gắn thêm đường WebSocket `/api/rubik/online/ws`; các yêu cầu nâng cấp khác vẫn đi Web CLI. Tệp HTML trên Hub được thêm `rubik-api-base=/api/rubik/`; chạy riêng vẫn dùng API tương đối. Bộ cài giữ bản mã API Hub gốc tại `data/rubik-room-service/hub-*.before-rubik.js`, bản ngay trước mỗi lần cài tại `hub-*.deploy-before.js`, kiểm thử API Hub trước khi khởi động lại và tự phục hồi nếu không đạt.
 
 ## Đóng góp
 

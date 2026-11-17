@@ -12,6 +12,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { createRoomApi } = require('./rooms.js');
+const { createOnline } = require('../server/online/http.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const TYPES = {
@@ -48,8 +49,14 @@ function resolveRequest(root, url) {
   return { file };
 }
 
-const handler = (root, roomApi, dataDir) => async (req, res) => {
+const handler = (root, roomApi, dataDir, online) => async (req, res) => {
   try {
+    if (online && await online.handle(req, res)) return;
+    if (!online && /^\/api\/online(?:\/|$)/.test(req.url)) {
+      res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ code: 'service_unavailable', message: 'Dịch vụ thi trực tiếp đang tạm dừng.' }));
+      return;
+    }
     if (await roomApi(req, res)) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.setHeader('Allow', 'GET, HEAD');
@@ -84,10 +91,22 @@ const handler = (root, roomApi, dataDir) => async (req, res) => {
   }
 };
 
-// root: thư mục phục vụ (mặc định thư mục dự án; kiểm thử dùng bản sao tạm để giả lập phiên bản mới).
+/*
+ * root: thư mục phục vụ (mặc định thư mục dự án; kiểm thử dùng bản sao tạm để giả lập phiên bản mới).
+ * options.online: false để tắt Thi trực tiếp, hoặc tùy chọn cho createOnline (config, scrambler...).
+ * Thi trực tiếp lỗi khởi động (ví dụ dữ liệu đang bị tiến trình khác giữ) không làm dừng các phần còn lại.
+ */
 async function start(port = 8000, host = '127.0.0.1', root = ROOT, options = {}) {
   const dataDir = path.resolve(options.dataDir || process.env.ROOM_DATA_DIR || path.join(root, '.local', 'room-data'));
   const roomApi = await createRoomApi(dataDir);
+  let online = null;
+  if (options.online !== false) {
+    try {
+      online = createOnline(path.join(dataDir, 'online'), options.online || {});
+    } catch (err) {
+      console.error(`Thi trực tiếp chưa chạy được: ${err.message}`);
+    }
+  }
   return new Promise((resolve, reject) => {
     let realRoot;
     try {
@@ -96,8 +115,19 @@ async function start(port = 8000, host = '127.0.0.1', root = ROOT, options = {})
       reject(err);
       return;
     }
-    const server = http.createServer(handler(realRoot, roomApi, dataDir));
-    server.once('error', reject);
+    const server = http.createServer(handler(realRoot, roomApi, dataDir, online));
+    server.online = online;
+    server.on('upgrade', (req, socket, head) => {
+      if (!online || !online.upgrade(req, socket, head)) socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+    });
+    // Đóng máy chủ thì báo và đóng các kết nối WebSocket trước, nếu không server.close() chờ chúng mãi.
+    const closeServer = server.close.bind(server);
+    server.close = (callback) => {
+      if (online) online.service.shutdown();
+      return closeServer(callback);
+    };
+    server.on('close', () => { if (online) void online.close(); });
+    server.once('error', (err) => { if (online) void online.close(); reject(err); });
     server.listen(port, host, () => resolve(server));
   });
 }
@@ -107,8 +137,19 @@ module.exports = { start };
 if (require.main === module) {
   const port = Number(process.argv[2] || process.env.PORT || 8000);
   const host = process.env.HOST || '127.0.0.1';
-  start(port, host).then(() => {
+  start(port, host).then((server) => {
     console.log(`Đang chạy tại http://${host === '0.0.0.0' ? 'localhost' : host}:${port}/  (Ctrl+C để dừng)`);
+    // Dừng có kiểm soát: báo người chơi, nhả khóa dữ liệu; ván đang chạy sẽ là VOID khi khởi động lại (BR-25).
+    let stopping = false;
+    for (const signal of ['SIGINT', 'SIGTERM']) {
+      process.on(signal, () => {
+        if (stopping) return;
+        stopping = true;
+        const done = () => process.exit(0);
+        Promise.resolve(server.online && server.online.close()).then(done, done);
+        setTimeout(done, 1500).unref();
+      });
+    }
   }, (err) => {
     console.error(`Không mở được cổng ${port}: ${err.message}`);
     process.exitCode = 1;
